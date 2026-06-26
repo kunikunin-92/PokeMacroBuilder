@@ -71,10 +71,17 @@ public sealed class KeySlot : INotifyPropertyChanged
     }
 }
 
-/// <summary>ボタンを押す(キーが複数なら同時押し、回数>1で連打)。</summary>
+/// <summary>
+/// ボタン入力。動作モードで「押す(連打可)」「押し続ける」「離す」を切り替える。
+/// キーが複数なら同時押し。
+/// </summary>
 public sealed class PressBlock : MacroBlock
 {
     public override string Kind => "ボタンを押す";
+
+    /// <summary>0:押す 1:押し続ける(hold) 2:離す(holdEnd)</summary>
+    private int _mode;
+    public int Mode { get => _mode; set => Set(ref _mode, value); }
 
     public ObservableCollection<KeySlot> Keys { get; } = new();
 
@@ -113,21 +120,6 @@ public sealed class StickBlock : MacroBlock
     public double Wait { get => _wait; set => Set(ref _wait, value); }
 }
 
-/// <summary>ボタンを押し続ける / 離す。</summary>
-public sealed class HoldBlock : MacroBlock
-{
-    public override string Kind => "長押し / 離す";
-
-    /// <summary>0:押し続ける 1:離す</summary>
-    private int _mode;
-    public int Mode { get => _mode; set => Set(ref _mode, value); }
-
-    public KeySlot Key { get; } = new();
-
-    private double _wait = 0.1;
-    public double Wait { get => _wait; set => Set(ref _wait, value); }
-}
-
 /// <summary>指定秒数だけ待機する。</summary>
 public sealed class WaitBlock : MacroBlock
 {
@@ -140,22 +132,18 @@ public sealed class WaitBlock : MacroBlock
 // ============================================================
 //  制御フロー系(コンテナ)
 // ============================================================
-public sealed class RepeatBlock : ContainerBlock
+/// <summary>ループ。種類で「ずっと/回数/条件の間」を切り替える。</summary>
+public sealed class LoopBlock : ContainerBlock
 {
-    public override string Kind => "くり返す (回数)";
+    public override string Kind => "ループ";
+
+    /// <summary>0:ずっと 1:回数 2:条件の間</summary>
+    private int _loopKind = 1;
+    public int LoopKind { get => _loopKind; set => Set(ref _loopKind, value); }
 
     private int _count = 10;
     public int Count { get => _count; set => Set(ref _count, value); }
-}
 
-public sealed class ForeverBlock : ContainerBlock
-{
-    public override string Kind => "ずっとくり返す";
-}
-
-public sealed class WhileBlock : ContainerBlock
-{
-    public override string Kind => "条件の間くり返す";
     public Condition Condition { get; } = new();
 }
 

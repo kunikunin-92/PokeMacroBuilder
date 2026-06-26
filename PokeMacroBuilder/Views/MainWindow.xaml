@@ -48,7 +48,13 @@
                     <StackPanel>
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#x1F3AE;" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <TextBlock Text="ボタンを押す" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
+                            <TextBlock Text="ボタン" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                            <ComboBox Width="120" Height="28" SelectedIndex="{Binding Mode, Mode=TwoWay}"
+                                      SelectionChanged="Field_SelectionChanged">
+                                <ComboBoxItem Content="押す"/>
+                                <ComboBoxItem Content="押し続ける"/>
+                                <ComboBoxItem Content="離す"/>
+                            </ComboBox>
                         </StackPanel>
 
                         <ItemsControl ItemsSource="{Binding Keys}" Margin="0,8,0,0">
@@ -70,10 +76,11 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
 
-                        <Button Content="&#x2795; キー追加 (同時押し)" Height="28" Padding="10,2"
+                        <Button x:Name="addKeyBtn" Content="&#x2795; キー追加 (同時押し)" Height="28" Padding="10,2"
                                 HorizontalAlignment="Left" Click="AddKeySlot_Click"/>
 
-                        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                        <!-- 押す(連打可) -->
+                        <StackPanel x:Name="pressTiming" Orientation="Horizontal" Margin="0,10,0,0">
                             <TextBlock Text="押す時間" Foreground="White" VerticalAlignment="Center"/>
                             <TextBox Width="64" Height="28" Margin="6,0,3,0" LostFocus="NumberField_LostFocus"
                                      Text="{Binding Duration, StringFormat=0.###, UpdateSourceTrigger=LostFocus}"/>
@@ -87,6 +94,14 @@
                                      ToolTip="1なら1回、2以上で連打" Text="{Binding Repeat, UpdateSourceTrigger=LostFocus}"/>
                             <TextBlock Text="回" Foreground="White" VerticalAlignment="Center"/>
                         </StackPanel>
+
+                        <!-- 押し続ける(hold) -->
+                        <StackPanel x:Name="holdTiming" Orientation="Horizontal" Margin="0,10,0,0" Visibility="Collapsed">
+                            <TextBlock Text="後で待つ" Foreground="White" VerticalAlignment="Center"/>
+                            <TextBox Width="64" Height="28" Margin="6,0,3,0" LostFocus="NumberField_LostFocus"
+                                     Text="{Binding Wait, StringFormat=0.###, UpdateSourceTrigger=LostFocus}"/>
+                            <TextBlock Text="秒  (押したままにします。別ブロックで「離す」を)" Foreground="#DDFFFFFF" VerticalAlignment="Center"/>
+                        </StackPanel>
                     </StackPanel>
 
                     <StackPanel Grid.Column="1" VerticalAlignment="Top">
@@ -99,6 +114,15 @@
                     </StackPanel>
                 </Grid>
             </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Mode}" Value="1">
+                    <Setter TargetName="pressTiming" Property="Visibility" Value="Collapsed"/>
+                    <Setter TargetName="holdTiming" Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Mode}" Value="2">
+                    <Setter TargetName="pressTiming" Property="Visibility" Value="Collapsed"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
         </DataTemplate>
 
         <!-- ===== スティック / 方向ブロック ===== -->
@@ -223,34 +247,6 @@
             </Border>
         </DataTemplate>
 
-        <!-- ===== 長押し / 離す ===== -->
-        <DataTemplate DataType="{x:Type models:HoldBlock}">
-            <Border Background="#FF3D7FE0" CornerRadius="5" Margin="0,0,0,3">
-                <Grid Margin="12,10">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#x270B;" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                        <ComboBox Width="120" Height="28" SelectedIndex="{Binding Mode, Mode=TwoWay}"
-                                  SelectionChanged="Field_SelectionChanged">
-                            <ComboBoxItem Content="押し続ける"/>
-                            <ComboBoxItem Content="離す"/>
-                        </ComboBox>
-                        <ComboBox Width="150" Height="28" Margin="8,0,0,0"
-                                  ItemsSource="{x:Static models:KeyCatalog.All}"
-                                  SelectedItem="{Binding Key.SelectedKey, Mode=TwoWay}"
-                                  SelectionChanged="Field_SelectionChanged"/>
-                    </StackPanel>
-                    <StackPanel Grid.Column="1" VerticalAlignment="Top">
-                        <Button Content="&#x25B2;" Width="30" Height="26" Margin="0,0,0,3" Padding="0" ToolTip="上へ" Click="MoveUp_Click"/>
-                        <Button Content="&#x25BC;" Width="30" Height="26" Margin="0,0,0,3" Padding="0" ToolTip="下へ" Click="MoveDown_Click"/>
-                        <Button Content="&#x2715;" Width="30" Height="26" Padding="0" ToolTip="削除" Click="DeleteBlock_Click"/>
-                    </StackPanel>
-                </Grid>
-            </Border>
-        </DataTemplate>
-
         <!-- ===== 変数 ===== -->
         <DataTemplate DataType="{x:Type models:VariableBlock}">
             <Border Background="#FFFF8C1A" CornerRadius="5" Margin="0,0,0,3">
@@ -263,12 +259,17 @@
                         <TextBlock Text="変数" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" Margin="0,0,8,0"/>
                         <TextBox Width="90" Height="28" LostFocus="Field_LostFocus"
                                  Text="{Binding Name, UpdateSourceTrigger=LostFocus}"/>
-                        <ComboBox Width="92" Height="28" Margin="6,0,0,0" SelectedIndex="{Binding Op, Mode=TwoWay}"
+                        <ComboBox Width="108" Height="28" Margin="6,0,0,0" SelectedIndex="{Binding Op, Mode=TwoWay}"
                                   SelectionChanged="Field_SelectionChanged">
                             <ComboBoxItem Content="= 代入"/>
                             <ComboBoxItem Content="+= 加算"/>
+                            <ComboBoxItem Content="-= 減算"/>
+                            <ComboBoxItem Content="*= 乗算"/>
+                            <ComboBoxItem Content="/= 除算"/>
+                            <ComboBoxItem Content="++ (1増やす)"/>
+                            <ComboBoxItem Content="-- (1減らす)"/>
                         </ComboBox>
-                        <TextBox Width="90" Height="28" Margin="6,0,0,0" LostFocus="Field_LostFocus"
+                        <TextBox x:Name="varValue" Width="90" Height="28" Margin="6,0,0,0" LostFocus="Field_LostFocus"
                                  Text="{Binding Value, UpdateSourceTrigger=LostFocus}"/>
                     </StackPanel>
                     <StackPanel Grid.Column="1" VerticalAlignment="Top">
@@ -278,6 +279,14 @@
                     </StackPanel>
                 </Grid>
             </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Op}" Value="5">
+                    <Setter TargetName="varValue" Property="Visibility" Value="Collapsed"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Op}" Value="6">
+                    <Setter TargetName="varValue" Property="Visibility" Value="Collapsed"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
         </DataTemplate>
 
         <!-- ===== ログ出力 ===== -->
@@ -353,97 +362,42 @@
             </Border>
         </DataTemplate>
 
-        <!-- ===== くり返す(回数) ===== -->
-        <DataTemplate DataType="{x:Type models:RepeatBlock}">
+        <!-- ===== ループ(ずっと/回数/条件の間) ===== -->
+        <DataTemplate DataType="{x:Type models:LoopBlock}">
             <Border Background="#FFE6A817" CornerRadius="5" Margin="0,0,0,3">
                 <StackPanel>
                     <Grid Margin="12,8">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#x1F501;" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <TextBlock Text="くり返す" FontWeight="Bold" Foreground="#FF3B2A00" VerticalAlignment="Center"/>
-                            <TextBox Width="56" Height="28" Margin="8,0,3,0" LostFocus="Field_LostFocus"
-                                     Text="{Binding Count, UpdateSourceTrigger=LostFocus}"/>
-                            <TextBlock Text="回" Foreground="#FF3B2A00" VerticalAlignment="Center" FontWeight="Bold"/>
-                            <Button x:Name="tBtn" Content="&#x2295; ここに追加" Height="26" Margin="14,0,0,0" Padding="8,2"
-                                    Click="SetTargetHere_Click"/>
-                        </StackPanel>
-                        <StackPanel Grid.Column="1" Orientation="Horizontal">
-                            <Button Content="&#x25B2;" Width="30" Height="26" Margin="0,0,3,0" Padding="0" ToolTip="上へ" Click="MoveUp_Click"/>
-                            <Button Content="&#x25BC;" Width="30" Height="26" Margin="0,0,3,0" Padding="0" ToolTip="下へ" Click="MoveDown_Click"/>
-                            <Button Content="&#x2715;" Width="30" Height="26" Padding="0" ToolTip="削除" Click="DeleteBlock_Click"/>
-                        </StackPanel>
-                    </Grid>
-                    <Grid Margin="0,0,8,8">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="16"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                        <Border x:Name="body" Grid.Column="1" Background="#22000000" CornerRadius="4" MinHeight="34" Padding="8,6"
-                                BorderBrush="Transparent" BorderThickness="2">
-                            <ItemsControl ItemsSource="{Binding Children}"/>
-                        </Border>
-                    </Grid>
-                </StackPanel>
-            </Border>
-            <DataTemplate.Triggers>
-                <DataTrigger Binding="{Binding IsTarget}" Value="True">
-                    <Setter TargetName="body" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
-                    <Setter TargetName="tBtn" Property="Content" Value="&#x2713; 追加先"/>
-                </DataTrigger>
-            </DataTemplate.Triggers>
-        </DataTemplate>
-
-        <!-- ===== ずっとくり返す ===== -->
-        <DataTemplate DataType="{x:Type models:ForeverBlock}">
-            <Border Background="#FFE6A817" CornerRadius="5" Margin="0,0,0,3">
-                <StackPanel>
-                    <Grid Margin="12,8">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#x267E;" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <TextBlock Text="ずっとくり返す" FontWeight="Bold" Foreground="#FF3B2A00" VerticalAlignment="Center"/>
-                            <Button x:Name="tBtn" Content="&#x2295; ここに追加" Height="26" Margin="14,0,0,0" Padding="8,2"
-                                    Click="SetTargetHere_Click"/>
-                        </StackPanel>
-                        <StackPanel Grid.Column="1" Orientation="Horizontal">
-                            <Button Content="&#x25B2;" Width="30" Height="26" Margin="0,0,3,0" Padding="0" ToolTip="上へ" Click="MoveUp_Click"/>
-                            <Button Content="&#x25BC;" Width="30" Height="26" Margin="0,0,3,0" Padding="0" ToolTip="下へ" Click="MoveDown_Click"/>
-                            <Button Content="&#x2715;" Width="30" Height="26" Padding="0" ToolTip="削除" Click="DeleteBlock_Click"/>
-                        </StackPanel>
-                    </Grid>
-                    <Grid Margin="0,0,8,8">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="16"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                        <Border x:Name="body" Grid.Column="1" Background="#22000000" CornerRadius="4" MinHeight="34" Padding="8,6"
-                                BorderBrush="Transparent" BorderThickness="2">
-                            <ItemsControl ItemsSource="{Binding Children}"/>
-                        </Border>
-                    </Grid>
-                </StackPanel>
-            </Border>
-            <DataTemplate.Triggers>
-                <DataTrigger Binding="{Binding IsTarget}" Value="True">
-                    <Setter TargetName="body" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
-                    <Setter TargetName="tBtn" Property="Content" Value="&#x2713; 追加先"/>
-                </DataTrigger>
-            </DataTemplate.Triggers>
-        </DataTemplate>
-
-        <!-- ===== 条件の間くり返す ===== -->
-        <DataTemplate DataType="{x:Type models:WhileBlock}">
-            <Border Background="#FFE6A817" CornerRadius="5" Margin="0,0,0,3">
-                <StackPanel>
-                    <Grid Margin="12,8">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#x1F501;" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <TextBlock Text="の間くり返す:" FontWeight="Bold" Foreground="#FF3B2A00" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <TextBox Width="80" Height="28" LostFocus="Field_LostFocus"
-                                     Text="{Binding Condition.Var, UpdateSourceTrigger=LostFocus}"/>
-                            <ComboBox Width="58" Height="28" Margin="4,0" SelectedIndex="{Binding Condition.Op, Mode=TwoWay}"
+                            <TextBlock Text="ループ" FontWeight="Bold" Foreground="#FF3B2A00" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <ComboBox Width="100" Height="28" SelectedIndex="{Binding LoopKind, Mode=TwoWay}"
                                       SelectionChanged="Field_SelectionChanged">
-                                <ComboBoxItem Content="="/><ComboBoxItem Content="&#x2260;"/><ComboBoxItem Content="&lt;"/>
-                                <ComboBoxItem Content="&#x2264;"/><ComboBoxItem Content="&gt;"/><ComboBoxItem Content="&#x2265;"/>
+                                <ComboBoxItem Content="ずっと"/>
+                                <ComboBoxItem Content="回数"/>
+                                <ComboBoxItem Content="条件の間"/>
                             </ComboBox>
-                            <TextBox Width="80" Height="28" LostFocus="Field_LostFocus"
-                                     Text="{Binding Condition.Value, UpdateSourceTrigger=LostFocus}"/>
+
+                            <!-- 回数 (LoopKind=1) -->
+                            <StackPanel x:Name="countPanel" Orientation="Horizontal" Margin="8,0,0,0">
+                                <TextBox Width="56" Height="28" Margin="0,0,3,0" LostFocus="Field_LostFocus"
+                                         Text="{Binding Count, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Text="回" Foreground="#FF3B2A00" VerticalAlignment="Center" FontWeight="Bold"/>
+                            </StackPanel>
+
+                            <!-- 条件 (LoopKind=2) -->
+                            <StackPanel x:Name="condPanel" Orientation="Horizontal" Margin="8,0,0,0" Visibility="Collapsed">
+                                <TextBox Width="80" Height="28" LostFocus="Field_LostFocus"
+                                         Text="{Binding Condition.Var, UpdateSourceTrigger=LostFocus}"/>
+                                <ComboBox Width="58" Height="28" Margin="4,0" SelectedIndex="{Binding Condition.Op, Mode=TwoWay}"
+                                          SelectionChanged="Field_SelectionChanged">
+                                    <ComboBoxItem Content="="/><ComboBoxItem Content="&#x2260;"/><ComboBoxItem Content="&lt;"/>
+                                    <ComboBoxItem Content="&#x2264;"/><ComboBoxItem Content="&gt;"/><ComboBoxItem Content="&#x2265;"/>
+                                </ComboBox>
+                                <TextBox Width="80" Height="28" LostFocus="Field_LostFocus"
+                                         Text="{Binding Condition.Value, UpdateSourceTrigger=LostFocus}"/>
+                            </StackPanel>
+
                             <Button x:Name="tBtn" Content="&#x2295; ここに追加" Height="26" Margin="14,0,0,0" Padding="8,2"
                                     Click="SetTargetHere_Click"/>
                         </StackPanel>
@@ -463,6 +417,13 @@
                 </StackPanel>
             </Border>
             <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding LoopKind}" Value="0">
+                    <Setter TargetName="countPanel" Property="Visibility" Value="Collapsed"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding LoopKind}" Value="2">
+                    <Setter TargetName="countPanel" Property="Visibility" Value="Collapsed"/>
+                    <Setter TargetName="condPanel" Property="Visibility" Value="Visible"/>
+                </DataTrigger>
                 <DataTrigger Binding="{Binding IsTarget}" Value="True">
                     <Setter TargetName="body" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
                     <Setter TargetName="tBtn" Property="Content" Value="&#x2713; 追加先"/>
@@ -756,20 +717,14 @@
                                 <StackPanel Orientation="Horizontal"><TextBlock Text="&#x1F3AE;" Margin="2,0,8,0"/><TextBlock Text="ボタンを押す" FontWeight="Bold" Foreground="White"/></StackPanel></Button>
                             <Button Margin="0,0,0,5" Height="34" HorizontalContentAlignment="Left" Background="#FF9966FF" BorderBrush="#FF7A4DDB" Click="AddStick_Click">
                                 <StackPanel Orientation="Horizontal"><TextBlock Text="&#x1F579;" Margin="2,0,8,0"/><TextBlock Text="スティック / 方向" FontWeight="Bold" Foreground="White"/></StackPanel></Button>
-                            <Button Margin="0,0,0,5" Height="34" HorizontalContentAlignment="Left" Background="#FF3D7FE0" BorderBrush="#FF2C66BD" Click="AddHold_Click">
-                                <StackPanel Orientation="Horizontal"><TextBlock Text="&#x270B;" Margin="2,0,8,0"/><TextBlock Text="長押し / 離す" FontWeight="Bold" Foreground="White"/></StackPanel></Button>
                             <Button Margin="0,0,0,10" Height="34" HorizontalContentAlignment="Left" Background="#FFFFAB19" BorderBrush="#FFD98E0F" Click="AddWait_Click">
                                 <StackPanel Orientation="Horizontal"><TextBlock Text="&#x23F1;" Margin="2,0,8,0"/><TextBlock Text="待機する" FontWeight="Bold" Foreground="#FF3B2A00"/></StackPanel></Button>
 
                             <TextBlock Text="制御フロー" Foreground="{StaticResource TextDimBrush}" FontSize="11" Margin="2,0,0,4"/>
                             <Button Margin="0,0,0,5" Height="34" HorizontalContentAlignment="Left" Background="#FFE6A817" BorderBrush="#FFC78F0E" Click="AddIf_Click">
                                 <StackPanel Orientation="Horizontal"><TextBlock Text="&#x2753;" Margin="2,0,8,0"/><TextBlock Text="もし〜なら" FontWeight="Bold" Foreground="#FF3B2A00"/></StackPanel></Button>
-                            <Button Margin="0,0,0,5" Height="34" HorizontalContentAlignment="Left" Background="#FFE6A817" BorderBrush="#FFC78F0E" Click="AddWhile_Click">
-                                <StackPanel Orientation="Horizontal"><TextBlock Text="&#x1F501;" Margin="2,0,8,0"/><TextBlock Text="条件の間くり返す" FontWeight="Bold" Foreground="#FF3B2A00"/></StackPanel></Button>
-                            <Button Margin="0,0,0,5" Height="34" HorizontalContentAlignment="Left" Background="#FFE6A817" BorderBrush="#FFC78F0E" Click="AddRepeat_Click">
-                                <StackPanel Orientation="Horizontal"><TextBlock Text="&#x1F522;" Margin="2,0,8,0"/><TextBlock Text="くり返す (回数)" FontWeight="Bold" Foreground="#FF3B2A00"/></StackPanel></Button>
-                            <Button Margin="0,0,0,10" Height="34" HorizontalContentAlignment="Left" Background="#FFE6A817" BorderBrush="#FFC78F0E" Click="AddForever_Click">
-                                <StackPanel Orientation="Horizontal"><TextBlock Text="&#x267E;" Margin="2,0,8,0"/><TextBlock Text="ずっとくり返す" FontWeight="Bold" Foreground="#FF3B2A00"/></StackPanel></Button>
+                            <Button Margin="0,0,0,10" Height="34" HorizontalContentAlignment="Left" Background="#FFE6A817" BorderBrush="#FFC78F0E" Click="AddLoop_Click">
+                                <StackPanel Orientation="Horizontal"><TextBlock Text="&#x1F501;" Margin="2,0,8,0"/><TextBlock Text="ループ (ずっと/回数/条件)" FontWeight="Bold" Foreground="#FF3B2A00"/></StackPanel></Button>
 
                             <TextBlock Text="データ・通知" Foreground="{StaticResource TextDimBrush}" FontSize="11" Margin="2,0,0,4"/>
                             <Button Margin="0,0,0,5" Height="34" HorizontalContentAlignment="Left" Background="#FFFF8C1A" BorderBrush="#FFD9750E" Click="AddVariable_Click">

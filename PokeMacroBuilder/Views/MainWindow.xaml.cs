@@ -406,11 +406,8 @@ public partial class MainWindow : Window
 
     private void AddPress_Click(object sender, RoutedEventArgs e) => AddToTarget(new PressBlock());
     private void AddStick_Click(object sender, RoutedEventArgs e) => AddToTarget(new StickBlock());
-    private void AddHold_Click(object sender, RoutedEventArgs e) => AddToTarget(new HoldBlock());
     private void AddWait_Click(object sender, RoutedEventArgs e) => AddToTarget(new WaitBlock());
-    private void AddRepeat_Click(object sender, RoutedEventArgs e) => AddToTarget(new RepeatBlock());
-    private void AddForever_Click(object sender, RoutedEventArgs e) => AddToTarget(new ForeverBlock());
-    private void AddWhile_Click(object sender, RoutedEventArgs e) => AddToTarget(new WhileBlock());
+    private void AddLoop_Click(object sender, RoutedEventArgs e) => AddToTarget(new LoopBlock());
     private void AddIf_Click(object sender, RoutedEventArgs e) => AddToTarget(new IfBlock());
     private void AddVariable_Click(object sender, RoutedEventArgs e) => AddToTarget(new VariableBlock());
     private void AddLog_Click(object sender, RoutedEventArgs e) => AddToTarget(new LogBlock());

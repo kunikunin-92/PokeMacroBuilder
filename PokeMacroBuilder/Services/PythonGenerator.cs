@@ -12,7 +12,7 @@ namespace PokeMacroBuilder.Services;
 public static class PythonGenerator
 {
     private static readonly string[] CmpOps = { "==", "!=", "<", "<=", ">", ">=" };
-    private static readonly string[] AssignOps = { "=", "+=" };
+    private static readonly string[] AssignOps = { "=", "+=", "-=", "*=", "/=" };
 
     private static string Num(double v) => v.ToString("0.###", CultureInfo.InvariantCulture);
 
@@ -117,16 +117,11 @@ public static class PythonGenerator
                 case StickBlock s:
                     outp.Add((rel, EmitStick(s)));
                     break;
-                case HoldBlock h:
-                    outp.Add((rel, h.Mode == 1
-                        ? $"self.holdEnd({h.Key.SelectedKey.Code})"
-                        : $"self.hold({h.Key.SelectedKey.Code}, wait={Num(h.Wait)})"));
-                    break;
                 case WaitBlock w:
                     outp.Add((rel, $"self.wait({Num(w.Seconds)})"));
                     break;
                 case VariableBlock v:
-                    outp.Add((rel, $"self.{SanitizeVar(v.Name)} {AssignOps[v.Op & 1]} {ValueLiteral(v.Value)}"));
+                    outp.Add((rel, EmitVariable(v)));
                     break;
                 case LogBlock l:
                     outp.Add((rel, $"print('{EscapeQuote(l.Text)}')"));
@@ -141,17 +136,14 @@ public static class PythonGenerator
                         ? "self.saveCapture()"
                         : $"self.saveCapture('{EscapeQuote(sc.Name)}')"));
                     break;
-                case RepeatBlock r:
-                    outp.Add((rel, $"for _ in range({(r.Count < 0 ? 0 : r.Count)}):"));
-                    EmitBody(r.Children, rel + 1, outp);
-                    break;
-                case ForeverBlock f:
-                    outp.Add((rel, "while True:"));
-                    EmitBody(f.Children, rel + 1, outp);
-                    break;
-                case WhileBlock wb:
-                    outp.Add((rel, $"while {Cond(wb.Condition)}:"));
-                    EmitBody(wb.Children, rel + 1, outp);
+                case LoopBlock lp:
+                    outp.Add((rel, lp.LoopKind switch
+                    {
+                        0 => "while True:",
+                        2 => $"while {Cond(lp.Condition)}:",
+                        _ => $"for _ in range({(lp.Count < 0 ? 0 : lp.Count)}):"
+                    }));
+                    EmitBody(lp.Children, rel + 1, outp);
                     break;
                 case IfBlock ib:
                     outp.Add((rel, $"if {Cond(ib.Condition)}:"));
@@ -177,9 +169,25 @@ public static class PythonGenerator
     {
         var codes = p.Keys.Select(k => k.SelectedKey.Code).ToList();
         string target = codes.Count == 1 ? codes[0] : "[" + string.Join(", ", codes) + "]";
-        if (p.Repeat > 1)
-            return $"self.pressRep({target}, {p.Repeat}, duration={Num(p.Duration)}, interval={Num(p.Wait)})";
-        return $"self.press({target}, duration={Num(p.Duration)}, wait={Num(p.Wait)})";
+        return p.Mode switch
+        {
+            1 => $"self.hold({target}, wait={Num(p.Wait)})",   // 押し続ける
+            2 => $"self.holdEnd({target})",                     // 離す
+            _ => p.Repeat > 1
+                ? $"self.pressRep({target}, {p.Repeat}, duration={Num(p.Duration)}, interval={Num(p.Wait)})"
+                : $"self.press({target}, duration={Num(p.Duration)}, wait={Num(p.Wait)})",
+        };
+    }
+
+    private static string EmitVariable(VariableBlock v)
+    {
+        var name = SanitizeVar(v.Name);
+        return v.Op switch
+        {
+            5 => $"self.{name} += 1",   // ++
+            6 => $"self.{name} -= 1",   // --
+            _ => $"self.{name} {AssignOps[v.Op is >= 0 and < 5 ? v.Op : 0]} {ValueLiteral(v.Value)}",
+        };
     }
 
     private static string EmitStick(StickBlock s)
@@ -242,7 +250,7 @@ public static class PythonGenerator
             switch (b)
             {
                 case VariableBlock v: Add(SanitizeVar(v.Name)); break;
-                case WhileBlock w: Add(SanitizeVar(w.Condition.Var)); break;
+                case LoopBlock l when l.LoopKind == 2: Add(SanitizeVar(l.Condition.Var)); break;
                 case IfBlock i: Add(SanitizeVar(i.Condition.Var)); break;
             }
         }

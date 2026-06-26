@@ -33,6 +33,7 @@ internal sealed class BlockDto
     public int Mode { get; set; }
     public string? KeyCode { get; set; }
     // 制御
+    public int LoopKind { get; set; } = 1;
     public int Count { get; set; } = 10;
     public string CondVar { get; set; } = "cnt";
     public int CondOp { get; set; }
@@ -119,7 +120,7 @@ public static class MacroSerializer
             case PressBlock p:
                 return new BlockDto
                 {
-                    Kind = "press",
+                    Kind = "press", Mode = p.Mode,
                     Keys = p.Keys.Select(k => k.SelectedKey.Code).ToList(),
                     Duration = p.Duration, Wait = p.Wait, Repeat = p.Repeat,
                 };
@@ -129,20 +130,14 @@ public static class MacroSerializer
                     Kind = "stick", Device = s.Device, Direction = s.Direction,
                     Magnitude = s.Magnitude, Duration = s.Duration, Wait = s.Wait,
                 };
-            case HoldBlock h:
-                return new BlockDto { Kind = "hold", Mode = h.Mode, KeyCode = h.Key.SelectedKey.Code, Wait = h.Wait };
             case WaitBlock w:
                 return new BlockDto { Kind = "wait", Seconds = w.Seconds };
-            case RepeatBlock r:
-                return new BlockDto { Kind = "repeat", Count = r.Count, Children = r.Children.Select(BuildBlock).ToList() };
-            case ForeverBlock f:
-                return new BlockDto { Kind = "forever", Children = f.Children.Select(BuildBlock).ToList() };
-            case WhileBlock wb:
+            case LoopBlock lp:
                 return new BlockDto
                 {
-                    Kind = "while",
-                    CondVar = wb.Condition.Var, CondOp = wb.Condition.Op, CondValue = wb.Condition.Value,
-                    Children = wb.Children.Select(BuildBlock).ToList(),
+                    Kind = "loop", LoopKind = lp.LoopKind, Count = lp.Count,
+                    CondVar = lp.Condition.Var, CondOp = lp.Condition.Op, CondValue = lp.Condition.Value,
+                    Children = lp.Children.Select(BuildBlock).ToList(),
                 };
             case IfBlock ib:
                 return new BlockDto
@@ -172,7 +167,11 @@ public static class MacroSerializer
         switch (b.Kind)
         {
             case "press":
-                var pb = new PressBlock { Duration = b.Duration, Wait = b.Wait, Repeat = b.Repeat < 1 ? 1 : b.Repeat };
+                var pb = new PressBlock
+                {
+                    Mode = b.Mode is >= 0 and <= 2 ? b.Mode : 0,
+                    Duration = b.Duration, Wait = b.Wait, Repeat = b.Repeat < 1 ? 1 : b.Repeat,
+                };
                 pb.Keys.Clear();
                 if (b.Keys is { Count: > 0 })
                     foreach (var c in b.Keys) pb.Keys.Add(new KeySlot { SelectedKey = KeyCatalog.FromCode(c) });
@@ -186,23 +185,30 @@ public static class MacroSerializer
                     Magnitude = b.Magnitude is > 0 and <= 100 ? b.Magnitude : 100,
                     Duration = b.Duration, Wait = b.Wait,
                 };
+            case "loop":
+                var lp = new LoopBlock { LoopKind = b.LoopKind is >= 0 and <= 2 ? b.LoopKind : 1, Count = b.Count };
+                lp.Condition.Var = b.CondVar; lp.Condition.Op = b.CondOp; lp.Condition.Value = b.CondValue;
+                Fill(lp.Children, b.Children);
+                return lp;
+            // ---- 旧形式の互換読み込み ----
             case "hold":
-                var hb = new HoldBlock { Mode = b.Mode == 1 ? 1 : 0, Wait = b.Wait };
-                hb.Key.SelectedKey = KeyCatalog.FromCode(b.KeyCode);
-                return hb;
+                var oldHold = new PressBlock { Mode = b.Mode == 1 ? 2 : 1, Wait = b.Wait };
+                oldHold.Keys.Clear();
+                oldHold.Keys.Add(new KeySlot { SelectedKey = KeyCatalog.FromCode(b.KeyCode) });
+                return oldHold;
             case "repeat":
-                var rb = new RepeatBlock { Count = b.Count };
-                Fill(rb.Children, b.Children);
-                return rb;
+                var oldRep = new LoopBlock { LoopKind = 1, Count = b.Count };
+                Fill(oldRep.Children, b.Children);
+                return oldRep;
             case "forever":
-                var fb = new ForeverBlock();
-                Fill(fb.Children, b.Children);
-                return fb;
+                var oldFor = new LoopBlock { LoopKind = 0 };
+                Fill(oldFor.Children, b.Children);
+                return oldFor;
             case "while":
-                var wbk = new WhileBlock();
-                wbk.Condition.Var = b.CondVar; wbk.Condition.Op = b.CondOp; wbk.Condition.Value = b.CondValue;
-                Fill(wbk.Children, b.Children);
-                return wbk;
+                var oldWhile = new LoopBlock { LoopKind = 2 };
+                oldWhile.Condition.Var = b.CondVar; oldWhile.Condition.Op = b.CondOp; oldWhile.Condition.Value = b.CondValue;
+                Fill(oldWhile.Children, b.Children);
+                return oldWhile;
             case "if":
                 var ifb = new IfBlock { HasElse = b.HasElse };
                 ifb.Condition.Var = b.CondVar; ifb.Condition.Op = b.CondOp; ifb.Condition.Value = b.CondValue;
@@ -210,7 +216,7 @@ public static class MacroSerializer
                 Fill(ifb.ElseChildren, b.ElseChildren);
                 return ifb;
             case "var":
-                return new VariableBlock { Name = b.VarName, Op = b.VarOp == 1 ? 1 : 0, Value = b.VarValue };
+                return new VariableBlock { Name = b.VarName, Op = b.VarOp is >= 0 and <= 6 ? b.VarOp : 0, Value = b.VarValue };
             case "log":
                 return new LogBlock { Text = b.Text };
             case "notify":
