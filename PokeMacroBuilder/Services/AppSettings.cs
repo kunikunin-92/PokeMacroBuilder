@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 
@@ -8,6 +9,16 @@ namespace PokeMacroBuilder.Services;
 public sealed class AppSettings
 {
     public string? LastWorkspace { get; set; }
+
+    /// <summary>最近開いたマクロのファイルパス(新しい順)。</summary>
+    public List<string> RecentFiles { get; set; } = new();
+
+    public void AddRecent(string path)
+    {
+        RecentFiles.RemoveAll(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
+        RecentFiles.Insert(0, path);
+        if (RecentFiles.Count > 8) RecentFiles.RemoveRange(8, RecentFiles.Count - 8);
+    }
 
     private static string SettingsPath
     {

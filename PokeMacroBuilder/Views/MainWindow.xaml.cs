@@ -1,13 +1,17 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Globalization;
+using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using Microsoft.Win32;
 using PokeMacroBuilder.Models;
 using PokeMacroBuilder.Services;
@@ -18,10 +22,17 @@ public partial class MainWindow : Window
 {
     private readonly AppSettings _settings;
     private MacroStore? _store;
-    private MacroDocument? _doc;          // 編集中のマクロ
+
+    private readonly ObservableCollection<MacroDocument> _openDocs = new();
+    private MacroDocument? _activeDoc;          // null = ホーム
+    private MacroDocument? _subscribedDoc;
     private bool _editorLoaded;
 
-    // ---- ドラッグ並べ替えの状態 ----
+    // ステータス
+    private string _idleStatus = "準備完了";
+    private readonly DispatcherTimer _statusTimer = new() { Interval = TimeSpan.FromSeconds(3) };
+
+    // ドラッグ並べ替え状態
     private bool _dragArmed;
     private bool _dragging;
     private Point _dragStart;
@@ -35,36 +46,43 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         _settings = AppSettings.Load();
+
+        TabBar.ItemsSource = _openDocs;
         BlocksHost.LostMouseCapture += (_, _) => EndDrag();
+        _statusTimer.Tick += (_, _) => { _statusTimer.Stop(); StatusText.Text = _idleStatus; };
 
         Loaded += (_, _) =>
         {
             if (!string.IsNullOrEmpty(_settings.LastWorkspace))
                 TrySetWorkspace(_settings.LastWorkspace!, silent: true);
-            ShowHome();
+            BuildRecentMenu();
+            ActivateHome();
         };
     }
 
     // ============================================================
-    //  画面切り替え(単一ウィンドウ)
+    //  タブ / 画面切り替え
     // ============================================================
-    private void ShowHome()
+    private void ActivateHome()
     {
+        _activeDoc = null;
+        foreach (var d in _openDocs) d.IsActive = false;
+        SetBlocksSubscription(null);
+        _editorLoaded = false;
+
         EditorPanel.Visibility = Visibility.Collapsed;
         HomePanel.Visibility = Visibility.Visible;
-        EditorCommands.Visibility = Visibility.Collapsed;
-        Breadcrumb.Text = "ホーム";
+        SetHomeTabActive(true);
         RefreshList();
     }
 
-    private void ShowEditor(MacroDocument doc)
+    private void ActivateDoc(MacroDocument doc)
     {
-        if (_doc != null)
-            _doc.Blocks.CollectionChanged -= Blocks_CollectionChanged;
+        _activeDoc = doc;
+        foreach (var d in _openDocs) d.IsActive = ReferenceEquals(d, doc);
+        SetHomeTabActive(false);
 
-        _doc = doc;
         _editorLoaded = false;
-
         DisplayNameBox.Text = doc.DisplayName;
         LoopBox.SelectedIndex = doc.Loop switch
         {
@@ -73,14 +91,11 @@ public partial class MainWindow : Window
             _ => 0
         };
         LoopCountBox.Text = doc.LoopCount.ToString(CultureInfo.InvariantCulture);
-
         BlocksHost.ItemsSource = doc.Blocks;
-        doc.Blocks.CollectionChanged += Blocks_CollectionChanged;
+        SetBlocksSubscription(doc);
 
         HomePanel.Visibility = Visibility.Collapsed;
         EditorPanel.Visibility = Visibility.Visible;
-        EditorCommands.Visibility = Visibility.Visible;
-        Breadcrumb.Text = doc.IsSaved ? $"編集 - {doc.FileName}" : "編集 - (新規マクロ)";
 
         _editorLoaded = true;
         UpdateLoopCountVisibility();
@@ -88,7 +103,70 @@ public partial class MainWindow : Window
         UpdatePreview();
     }
 
-    private bool IsEditorOpen => EditorPanel.Visibility == Visibility.Visible;
+    /// <summary>ドキュメントをタブとして開く(同一ファイルが既にあれば再利用)。</summary>
+    private void OpenDoc(MacroDocument doc)
+    {
+        if (doc.FilePath != null)
+        {
+            var existing = _openDocs.FirstOrDefault(d =>
+                d.FilePath != null && string.Equals(d.FilePath, doc.FilePath, StringComparison.OrdinalIgnoreCase));
+            if (existing != null) { ActivateDoc(existing); return; }
+        }
+        _openDocs.Add(doc);
+        ActivateDoc(doc);
+    }
+
+    private void CloseDoc(MacroDocument doc)
+    {
+        if (!doc.IsSaved && doc.Blocks.Count > 0)
+        {
+            var ans = MessageBox.Show(this,
+                $"「{doc.DisplayName}」は保存されていません。閉じますか?",
+                "確認", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (ans != MessageBoxResult.Yes) return;
+        }
+
+        int idx = _openDocs.IndexOf(doc);
+        bool wasActive = ReferenceEquals(_activeDoc, doc);
+        if (_subscribedDoc == doc) SetBlocksSubscription(null);
+        _openDocs.Remove(doc);
+
+        if (wasActive)
+        {
+            if (_openDocs.Count == 0) ActivateHome();
+            else ActivateDoc(_openDocs[Math.Min(idx, _openDocs.Count - 1)]);
+        }
+    }
+
+    private void SetBlocksSubscription(MacroDocument? doc)
+    {
+        if (ReferenceEquals(_subscribedDoc, doc)) return;
+        if (_subscribedDoc != null) _subscribedDoc.Blocks.CollectionChanged -= Blocks_CollectionChanged;
+        _subscribedDoc = doc;
+        if (_subscribedDoc != null) _subscribedDoc.Blocks.CollectionChanged += Blocks_CollectionChanged;
+    }
+
+    private void SetHomeTabActive(bool active)
+    {
+        HomeTab.Background = (Brush)FindResource(active ? "EditorBgBrush" : "ShellBgBrush");
+        HomeTab.BorderBrush = active ? (Brush)FindResource("AccentBrush") : Brushes.Transparent;
+        HomeTabText.Foreground = (Brush)FindResource(active ? "TextBrush" : "TextDimBrush");
+        HomeTabText.FontWeight = active ? FontWeights.SemiBold : FontWeights.Normal;
+    }
+
+    private void HomeTab_Click(object sender, MouseButtonEventArgs e) => ActivateHome();
+
+    private void Tab_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is FrameworkElement fe && fe.DataContext is MacroDocument doc)
+            ActivateDoc(doc);
+    }
+
+    private void TabClose_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement fe && fe.Tag is MacroDocument doc)
+            CloseDoc(doc);
+    }
 
     // ============================================================
     //  メニュー
@@ -97,12 +175,29 @@ public partial class MainWindow : Window
     private void MenuOpenWorkspace_Click(object sender, RoutedEventArgs e) => ChooseWorkspace_Click(sender, e);
     private void MenuSave_Click(object sender, RoutedEventArgs e)
     {
-        if (IsEditorOpen) Save_Click(sender, e);
+        if (_activeDoc != null) Save_Click(sender, e);
     }
-    private void MenuHome_Click(object sender, RoutedEventArgs e) => ShowHome();
+    private void MenuSaveAsCopy_Click(object sender, RoutedEventArgs e)
+    {
+        if (_store is null || _activeDoc is null) return;
+        SyncToDoc();
+        var copy = MacroSerializer.Clone(_activeDoc);
+        copy.DisplayName = _activeDoc.DisplayName + " のコピー";
+        OpenDoc(copy);
+        // 直ちにファイル化
+        try { _store.Save(copy); }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, "コピーの保存に失敗しました:\n" + ex.Message, "エラー",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+        AfterSaved(copy);
+    }
+    private void MenuHome_Click(object sender, RoutedEventArgs e) => ActivateHome();
     private void MenuRefresh_Click(object sender, RoutedEventArgs e)
     {
-        if (!IsEditorOpen) RefreshList();
+        if (_activeDoc is null) RefreshList();
     }
     private void MenuExit_Click(object sender, RoutedEventArgs e) => Close();
     private void MenuAbout_Click(object sender, RoutedEventArgs e)
@@ -112,6 +207,62 @@ public partial class MainWindow : Window
             "バージョン情報", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
+    private void BuildRecentMenu()
+    {
+        RecentMenu.Items.Clear();
+        if (_settings.RecentFiles.Count == 0)
+        {
+            RecentMenu.Items.Add(new MenuItem { Header = "(なし)", IsEnabled = false });
+            return;
+        }
+        foreach (var path in _settings.RecentFiles)
+        {
+            var item = new MenuItem { Header = Path.GetFileName(path), ToolTip = path, Tag = path };
+            item.Click += Recent_Click;
+            RecentMenu.Items.Add(item);
+        }
+    }
+
+    private void Recent_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem mi || mi.Tag is not string path) return;
+        if (!File.Exists(path))
+        {
+            MessageBox.Show(this, "ファイルが見つかりません:\n" + path, "情報",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            _settings.RecentFiles.Remove(path);
+            _settings.Save();
+            BuildRecentMenu();
+            return;
+        }
+        var doc = LoadDocFromPath(path);
+        if (doc != null) OpenDoc(doc);
+    }
+
+    private MacroDocument? LoadDocFromPath(string path)
+    {
+        try
+        {
+            var text = File.ReadAllText(path, System.Text.Encoding.UTF8);
+            var doc = MacroSerializer.TryParse(text);
+            if (doc is null)
+            {
+                MessageBox.Show(this, "このファイルは本ツールで作成されたマクロではありません。", "情報",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return null;
+            }
+            doc.FileName = Path.GetFileName(path);
+            doc.FilePath = path;
+            return doc;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, "読み込みに失敗しました:\n" + ex.Message, "エラー",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+            return null;
+        }
+    }
+
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {
         base.OnPreviewKeyDown(e);
@@ -119,7 +270,7 @@ public partial class MainWindow : Window
         {
             switch (e.Key)
             {
-                case Key.S when IsEditorOpen: Save_Click(this, new RoutedEventArgs()); e.Handled = true; break;
+                case Key.S when _activeDoc != null: Save_Click(this, new RoutedEventArgs()); e.Handled = true; break;
                 case Key.N: New_Click(this, new RoutedEventArgs()); e.Handled = true; break;
                 case Key.O: ChooseWorkspace_Click(this, new RoutedEventArgs()); e.Handled = true; break;
             }
@@ -139,10 +290,7 @@ public partial class MainWindow : Window
             dlg.InitialDirectory = _settings.LastWorkspace;
 
         if (dlg.ShowDialog(this) == true)
-        {
             TrySetWorkspace(dlg.FolderName, silent: false);
-            if (IsEditorOpen) ShowHome();
-        }
     }
 
     private void TrySetWorkspace(string path, bool silent)
@@ -162,8 +310,7 @@ public partial class MainWindow : Window
         _settings.LastWorkspace = path;
         _settings.Save();
         WorkspacePathText.Text = path;
-        StatusText.Text = $"ワークスペース: {path}";
-        RefreshList();
+        if (_activeDoc is null) RefreshList();
     }
 
     private void RefreshList()
@@ -172,14 +319,14 @@ public partial class MainWindow : Window
         List<MacroEntry> entries = _store.LoadAll();
         MacroList.ItemsSource = entries;
         EmptyHint.Visibility = entries.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        StatusText.Text = $"マクロ {entries.Count} 件  (保存先: {_store.GeneratedDir})";
+        SetIdleStatus($"マクロ {entries.Count} 件  (保存先: {_store.GeneratedDir})");
     }
 
     private void New_Click(object sender, RoutedEventArgs e)
     {
         if (!EnsureWorkspace()) return;
         var doc = new MacroDocument { DisplayName = "新しいマクロ" };
-        ShowEditor(doc);
+        OpenDoc(doc);
         DisplayNameBox.Focus();
         DisplayNameBox.SelectAll();
     }
@@ -195,7 +342,7 @@ public partial class MainWindow : Window
                 MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
-        ShowEditor(entry.Document);
+        OpenDoc(entry.Document);
     }
 
     private void Delete_Click(object sender, RoutedEventArgs e)
@@ -226,7 +373,7 @@ public partial class MainWindow : Window
     }
 
     // ============================================================
-    //  エディタ: ブロック操作
+    //  ブロック操作
     // ============================================================
     private void Blocks_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
@@ -236,15 +383,14 @@ public partial class MainWindow : Window
 
     private void UpdateEditorHints()
     {
-        if (_doc is null) return;
-        EmptyScriptHint.Visibility = _doc.Blocks.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (_activeDoc is null) return;
+        EmptyScriptHint.Visibility = _activeDoc.Blocks.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    private void AddPress_Click(object sender, RoutedEventArgs e) => _doc?.Blocks.Add(new PressBlock());
-    private void AddStick_Click(object sender, RoutedEventArgs e) => _doc?.Blocks.Add(new StickBlock());
-    private void AddWait_Click(object sender, RoutedEventArgs e) => _doc?.Blocks.Add(new WaitBlock());
+    private void AddPress_Click(object sender, RoutedEventArgs e) => _activeDoc?.Blocks.Add(new PressBlock());
+    private void AddStick_Click(object sender, RoutedEventArgs e) => _activeDoc?.Blocks.Add(new StickBlock());
+    private void AddWait_Click(object sender, RoutedEventArgs e) => _activeDoc?.Blocks.Add(new WaitBlock());
 
-    // スティックの8方向パッド
     private void PadButton_Click(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement fe && fe.DataContext is StickBlock sb &&
@@ -256,8 +402,6 @@ public partial class MainWindow : Window
     }
 
     private void StickField_Changed(object sender, SelectionChangedEventArgs e) => UpdatePreview();
-
-    // 数値入力欄を確定したらプレビューを更新
     private void NumberField_LostFocus(object sender, RoutedEventArgs e) => UpdatePreview();
 
     private void AddKeySlot_Click(object sender, RoutedEventArgs e)
@@ -271,8 +415,8 @@ public partial class MainWindow : Window
 
     private void RemoveKeySlot_Click(object sender, RoutedEventArgs e)
     {
-        if (_doc is null || ((FrameworkElement)sender).DataContext is not KeySlot slot) return;
-        foreach (var block in _doc.Blocks)
+        if (_activeDoc is null || ((FrameworkElement)sender).DataContext is not KeySlot slot) return;
+        foreach (var block in _activeDoc.Blocks)
         {
             if (block is PressBlock p && p.Keys.Contains(slot))
             {
@@ -285,33 +429,28 @@ public partial class MainWindow : Window
 
     private void MoveUp_Click(object sender, RoutedEventArgs e)
     {
-        if (_doc is null || ((FrameworkElement)sender).DataContext is not MacroBlock b) return;
-        int i = _doc.Blocks.IndexOf(b);
-        if (i > 0) _doc.Blocks.Move(i, i - 1);
+        if (_activeDoc is null || ((FrameworkElement)sender).DataContext is not MacroBlock b) return;
+        int i = _activeDoc.Blocks.IndexOf(b);
+        if (i > 0) _activeDoc.Blocks.Move(i, i - 1);
     }
 
     private void MoveDown_Click(object sender, RoutedEventArgs e)
     {
-        if (_doc is null || ((FrameworkElement)sender).DataContext is not MacroBlock b) return;
-        int i = _doc.Blocks.IndexOf(b);
-        if (i >= 0 && i < _doc.Blocks.Count - 1) _doc.Blocks.Move(i, i + 1);
+        if (_activeDoc is null || ((FrameworkElement)sender).DataContext is not MacroBlock b) return;
+        int i = _activeDoc.Blocks.IndexOf(b);
+        if (i >= 0 && i < _activeDoc.Blocks.Count - 1) _activeDoc.Blocks.Move(i, i + 1);
     }
 
     private void DeleteBlock_Click(object sender, RoutedEventArgs e)
     {
-        if (_doc != null && ((FrameworkElement)sender).DataContext is MacroBlock b)
-            _doc.Blocks.Remove(b);
+        if (_activeDoc != null && ((FrameworkElement)sender).DataContext is MacroBlock b)
+            _activeDoc.Blocks.Remove(b);
     }
 
-    // ---- ドラッグ並べ替え(ゴーストがマウスに追従し、周囲のブロックがリアルタイムで避ける) ----
+    // ---- ドラッグ並べ替え(ゴースト追従 + 周囲がリアルタイムで避ける) ----
     private void BlocksHost_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
-        // テキスト欄・コンボ・ボタン上ではドラッグ開始しない(通常操作を優先)
-        if (IsOverInteractive(e.OriginalSource as DependencyObject))
-        {
-            _dragArmed = false;
-            return;
-        }
+        if (IsOverInteractive(e.OriginalSource as DependencyObject)) { _dragArmed = false; return; }
         _dragBlock = FindBlock(e.OriginalSource as DependencyObject);
         _dragStart = e.GetPosition(BlocksHost);
         _dragArmed = _dragBlock != null;
@@ -320,10 +459,9 @@ public partial class MainWindow : Window
     private void BlocksHost_PreviewMouseMove(object sender, MouseEventArgs e)
     {
         if (!_dragArmed || _dragBlock is null) return;
-        if (e.LeftButton != MouseButtonState.Pressed) { return; }
+        if (e.LeftButton != MouseButtonState.Pressed) return;
 
         var pos = e.GetPosition(BlocksHost);
-
         if (!_dragging)
         {
             if (Math.Abs(pos.X - _dragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
@@ -371,23 +509,22 @@ public partial class MainWindow : Window
 
     private void ReorderTo(Point posInHost)
     {
-        if (_doc is null || _dragBlock is null) return;
-        int from = _doc.Blocks.IndexOf(_dragBlock);
+        if (_activeDoc is null || _dragBlock is null) return;
+        int from = _activeDoc.Blocks.IndexOf(_dragBlock);
         if (from < 0) return;
 
-        int target = _doc.Blocks.Count - 1;
-        for (int i = 0; i < _doc.Blocks.Count; i++)
+        // ドラッグ中ブロックを除き、中心がカーソルより上にあるブロック数 = 挿入位置(上下対称)
+        int insert = 0;
+        for (int i = 0; i < _activeDoc.Blocks.Count; i++)
         {
+            if (i == from) continue;
             if (BlocksHost.ItemContainerGenerator.ContainerFromIndex(i) is not FrameworkElement c) continue;
-            double top = c.TranslatePoint(new Point(0, 0), BlocksHost).Y;
-            if (posInHost.Y < top + c.ActualHeight / 2)
-            {
-                target = i;
-                break;
-            }
+            double center = c.TranslatePoint(new Point(0, c.ActualHeight / 2), BlocksHost).Y;
+            if (posInHost.Y > center) insert++;
+            else break;
         }
 
-        if (target != from) _doc.Blocks.Move(from, target);
+        if (insert != from) _activeDoc.Blocks.Move(from, insert);
     }
 
     private void AutoScroll(MouseEventArgs e)
@@ -396,9 +533,9 @@ public partial class MainWindow : Window
         var p = e.GetPosition(ScriptScroll);
         const double edge = 40;
         if (p.Y < edge)
-            ScriptScroll.ScrollToVerticalOffset(ScriptScroll.VerticalOffset - 12);
+            ScriptScroll.ScrollToVerticalOffset(ScriptScroll.VerticalOffset - 14);
         else if (p.Y > ScriptScroll.ActualHeight - edge)
-            ScriptScroll.ScrollToVerticalOffset(ScriptScroll.VerticalOffset + 12);
+            ScriptScroll.ScrollToVerticalOffset(ScriptScroll.VerticalOffset + 14);
     }
 
     private void EndDrag()
@@ -445,8 +582,15 @@ public partial class MainWindow : Window
     }
 
     // ============================================================
-    //  ループ / 保存 / プレビュー
+    //  表示名 / ループ / 保存 / プレビュー
     // ============================================================
+    private void DisplayNameBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (!_editorLoaded || _activeDoc is null) return;
+        _activeDoc.DisplayName = string.IsNullOrWhiteSpace(DisplayNameBox.Text) ? "新しいマクロ" : DisplayNameBox.Text;
+        UpdatePreview();
+    }
+
     private void LoopBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!_editorLoaded) return;
@@ -463,29 +607,28 @@ public partial class MainWindow : Window
 
     private void SyncToDoc()
     {
-        if (_doc is null) return;
-        _doc.DisplayName = string.IsNullOrWhiteSpace(DisplayNameBox.Text) ? "新しいマクロ" : DisplayNameBox.Text.Trim();
-        _doc.Loop = LoopBox.SelectedIndex switch
+        if (_activeDoc is null) return;
+        _activeDoc.DisplayName = string.IsNullOrWhiteSpace(DisplayNameBox.Text) ? "新しいマクロ" : DisplayNameBox.Text.Trim();
+        _activeDoc.Loop = LoopBox.SelectedIndex switch
         {
             1 => LoopMode.Infinite,
             2 => LoopMode.Count,
             _ => LoopMode.None
         };
-        _doc.LoopCount = int.TryParse(LoopCountBox.Text, out var n) && n > 0 ? n : 1;
+        _activeDoc.LoopCount = int.TryParse(LoopCountBox.Text, out var n) && n > 0 ? n : 1;
     }
 
     private void UpdatePreview()
     {
-        if (!_editorLoaded || _doc is null) return;
+        if (!_editorLoaded || _activeDoc is null) return;
         SyncToDoc();
-        PreviewBox.Text = PythonGenerator.Generate(_doc, _doc.FileName ?? "macro1.py");
+        var code = PythonGenerator.Generate(_activeDoc, _activeDoc.FileName ?? "macro1.py");
+        PreviewBox.Document = PythonHighlighter.BuildDocument(code);
     }
-
-    private void Preview_Click(object sender, RoutedEventArgs e) => UpdatePreview();
 
     private void Save_Click(object sender, RoutedEventArgs e)
     {
-        if (_store is null || _doc is null) return;
+        if (_store is null || _activeDoc is null) return;
         if (string.IsNullOrWhiteSpace(DisplayNameBox.Text))
         {
             MessageBox.Show(this, "表示名を入力してください。", "保存エラー",
@@ -496,7 +639,7 @@ public partial class MainWindow : Window
         SyncToDoc();
         try
         {
-            _store.Save(_doc);
+            _store.Save(_activeDoc);
         }
         catch (Exception ex)
         {
@@ -504,11 +647,34 @@ public partial class MainWindow : Window
                 MessageBoxButton.OK, MessageBoxImage.Error);
             return;
         }
-
-        Breadcrumb.Text = $"編集 - {_doc.FileName}";
-        StatusText.Text = $"保存しました: {_doc.FileName}  ({_doc.DisplayName})";
-        UpdatePreview();
+        AfterSaved(_activeDoc);
     }
 
-    private void Back_Click(object sender, RoutedEventArgs e) => ShowHome();
+    private void AfterSaved(MacroDocument doc)
+    {
+        UpdatePreview();
+        if (doc.FilePath != null)
+        {
+            _settings.AddRecent(doc.FilePath);
+            _settings.Save();
+            BuildRecentMenu();
+        }
+        FlashStatus($"✓ 保存しました — {doc.DisplayName} ({doc.FileName})");
+    }
+
+    // ============================================================
+    //  ステータス表示
+    // ============================================================
+    private void SetIdleStatus(string text)
+    {
+        _idleStatus = text;
+        if (!_statusTimer.IsEnabled) StatusText.Text = text;
+    }
+
+    private void FlashStatus(string text)
+    {
+        StatusText.Text = text;
+        _statusTimer.Stop();
+        _statusTimer.Start();   // 3秒後に通常表示へ戻す
+    }
 }

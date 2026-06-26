@@ -87,6 +87,10 @@ public static class MacroSerializer
         return Convert.ToBase64String(Encoding.UTF8.GetBytes(json));
     }
 
+    /// <summary>ブロック構成を丸ごと複製した新しい MacroDocument を返す(ファイル情報は引き継がない)。</summary>
+    public static MacroDocument Clone(MacroDocument doc)
+        => TryParse(Marker + ToBase64(doc)) ?? new MacroDocument { DisplayName = doc.DisplayName };
+
     /// <summary>ファイル本文から MacroDocument を復元。マーカーが無ければ null。</summary>
     public static MacroDocument? TryParse(string fileText)
     {

@@ -12,6 +12,29 @@
     <Window.Resources>
         <conv:DirectionSelectedConverter x:Key="DirSel"/>
 
+        <!-- ===== タブ(編集中ファイル) ===== -->
+        <DataTemplate x:Key="TabTemplate">
+            <Border x:Name="tabBd" Background="{StaticResource ShellBgBrush}" Cursor="Hand"
+                    BorderBrush="Transparent" BorderThickness="0,2,0,0" Margin="0,0,1,0"
+                    MouseLeftButtonUp="Tab_Click">
+                <StackPanel Orientation="Horizontal" Margin="12,6,6,6">
+                    <TextBlock Text="&#x1F4C4;" FontSize="12" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBlock x:Name="tabName" Text="{Binding DisplayName}" VerticalAlignment="Center"
+                               Foreground="{StaticResource TextDimBrush}" MaxWidth="160" TextTrimming="CharacterEllipsis"/>
+                    <Button Content="&#x2715;" Width="18" Height="18" Margin="8,0,0,0" Padding="0" FontSize="9"
+                            Click="TabClose_Click" Tag="{Binding}" ToolTip="閉じる"/>
+                </StackPanel>
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsActive}" Value="True">
+                    <Setter TargetName="tabBd" Property="Background" Value="{StaticResource EditorBgBrush}"/>
+                    <Setter TargetName="tabBd" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                    <Setter TargetName="tabName" Property="Foreground" Value="{StaticResource TextBrush}"/>
+                    <Setter TargetName="tabName" Property="FontWeight" Value="SemiBold"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
         <!-- ===== ボタン押下ブロック ===== -->
         <DataTemplate DataType="{x:Type models:PressBlock}">
             <Border Background="#FF4C97FF" CornerRadius="5" Margin="0,0,0,3">
@@ -92,7 +115,6 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition/><ColumnDefinition/><ColumnDefinition/>
                             </Grid.ColumnDefinitions>
-                            <!-- index: 0上1右上2右3右下4下5左下6左7左上 -->
                             <Button Grid.Row="0" Grid.Column="1" Tag="0" Content="↑" Click="PadButton_Click"
                                     Style="{StaticResource PadButton}" FontSize="18" FontWeight="Bold" Margin="2"
                                     Background="{Binding Direction, Converter={StaticResource DirSel}, ConverterParameter=0}"/>
@@ -122,7 +144,6 @@
                         </Grid>
                     </Border>
 
-                    <!-- 設定 -->
                     <StackPanel Grid.Column="1" Margin="14,0,0,0">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#x1F579;" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
@@ -201,7 +222,7 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>  <!-- メニューバー -->
-            <RowDefinition Height="Auto"/>  <!-- ナビゲーション/コマンドバー -->
+            <RowDefinition Height="Auto"/>  <!-- タブバー -->
             <RowDefinition Height="*"/>     <!-- コンテンツ -->
             <RowDefinition Height="Auto"/>  <!-- ステータスバー -->
         </Grid.RowDefinitions>
@@ -211,8 +232,10 @@
             <MenuItem Header="ファイル(_F)" Style="{StaticResource TopMenuItem}">
                 <MenuItem Header="新規マクロ(_N)" InputGestureText="Ctrl+N" Click="MenuNew_Click"/>
                 <MenuItem Header="ワークスペースを開く(_O)" InputGestureText="Ctrl+O" Click="MenuOpenWorkspace_Click"/>
+                <MenuItem x:Name="RecentMenu" Header="最近の項目(_R)"/>
                 <Separator/>
-                <MenuItem x:Name="MenuSave" Header="保存(_S)" InputGestureText="Ctrl+S" Click="MenuSave_Click"/>
+                <MenuItem Header="上書き保存(_S)" InputGestureText="Ctrl+S" Click="MenuSave_Click"/>
+                <MenuItem Header="名前を付けて保存（コピー）(_C)" Click="MenuSaveAsCopy_Click"/>
                 <Separator/>
                 <MenuItem Header="終了(_X)" Click="MenuExit_Click"/>
             </MenuItem>
@@ -225,36 +248,37 @@
             </MenuItem>
         </Menu>
 
-        <!-- ===== ナビゲーション / コマンドバー ===== -->
-        <Border Grid.Row="1" Background="{StaticResource ShellBgBrush}" Padding="10,6"
-                BorderBrush="{StaticResource BorderStrongBrush}" BorderThickness="0,1,0,1">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
+        <!-- ===== タブバー(VSCode風) ===== -->
+        <Border Grid.Row="1" Background="{StaticResource ShellBgBrush}"
+                BorderBrush="{StaticResource BorderStrongBrush}" BorderThickness="0,0,0,1">
+            <StackPanel Orientation="Horizontal">
+                <Border Width="22" Height="22" CornerRadius="3" Background="#FF5C2D91" Margin="8,0,6,0"
+                        VerticalAlignment="Center">
+                    <TextBlock Text="&#x1F9E9;" FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
 
-                <!-- ブランドロゴ + パンくず -->
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <Border Width="22" Height="22" CornerRadius="3" Background="#FF5C2D91" Margin="0,0,8,0">
-                        <TextBlock Text="&#x1F9E9;" FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    </Border>
-                    <TextBlock Text="PokeMacro Builder" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                    <TextBlock Text="&#x203A;" Margin="10,0" Foreground="{StaticResource TextDimBrush}" VerticalAlignment="Center"/>
-                    <TextBlock x:Name="Breadcrumb" Text="ホーム" Foreground="{StaticResource TextDimBrush}" VerticalAlignment="Center"/>
-                </StackPanel>
+                <!-- 固定: ホームタブ -->
+                <Border x:Name="HomeTab" Background="{StaticResource EditorBgBrush}" Cursor="Hand"
+                        BorderBrush="{StaticResource AccentBrush}" BorderThickness="0,2,0,0" Margin="0,0,1,0"
+                        MouseLeftButtonUp="HomeTab_Click">
+                    <StackPanel Orientation="Horizontal" Margin="12,6">
+                        <TextBlock Text="&#x1F3E0;" FontSize="12" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBlock x:Name="HomeTabText" Text="ホーム" VerticalAlignment="Center"
+                                   Foreground="{StaticResource TextBrush}" FontWeight="SemiBold"/>
+                    </StackPanel>
+                </Border>
 
-                <!-- エディタ専用コマンド(右側) -->
-                <StackPanel x:Name="EditorCommands" Grid.Column="2" Orientation="Horizontal" Visibility="Collapsed">
-                    <Button Content="&#x1F441; プレビュー更新" Margin="0,0,8,0" Click="Preview_Click"/>
-                    <Button Content="&#x1F4BE; 保存" Width="96" Style="{StaticResource AccentButton}" Click="Save_Click"/>
-                </StackPanel>
-            </Grid>
+                <!-- 編集中ファイルのタブ -->
+                <ItemsControl x:Name="TabBar" ItemTemplate="{StaticResource TabTemplate}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+            </StackPanel>
         </Border>
 
         <!-- =========================================================
-             コンテンツ領域: ホーム / エディタ を切り替え(単一ウィンドウ)
+             コンテンツ領域: ホーム / エディタ を切り替え
              ========================================================= -->
         <Grid Grid.Row="2">
 
@@ -370,12 +394,12 @@
                 </Grid.RowDefinitions>
 
                 <!-- エディタツールバー -->
-                <Border Grid.Row="0" Background="{StaticResource PanelBgBrush}" Padding="12,8"
+                <Border Grid.Row="0" Background="{StaticResource PanelBgBrush}" Padding="14,8"
                         BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
                     <StackPanel Orientation="Horizontal">
-                        <Button Content="&#x2190; 戻る" Width="78" Margin="0,0,16,0" Click="Back_Click"/>
                         <TextBlock Text="表示名:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                        <TextBox x:Name="DisplayNameBox" Width="240" Height="30" VerticalAlignment="Center" Margin="0,0,18,0"/>
+                        <TextBox x:Name="DisplayNameBox" Width="260" Height="30" VerticalAlignment="Center" Margin="0,0,20,0"
+                                 TextChanged="DisplayNameBox_TextChanged"/>
                         <TextBlock Text="繰り返し:" VerticalAlignment="Center" Margin="0,0,6,0"/>
                         <ComboBox x:Name="LoopBox" Width="130" Height="30" VerticalAlignment="Center"
                                   SelectionChanged="LoopBox_SelectionChanged">
@@ -384,7 +408,8 @@
                             <ComboBoxItem Content="回数を指定"/>
                         </ComboBox>
                         <TextBox x:Name="LoopCountBox" Width="64" Height="30" Margin="6,0,0,0"
-                                 VerticalAlignment="Center" Text="10" Visibility="Collapsed"/>
+                                 VerticalAlignment="Center" Text="10" Visibility="Collapsed"
+                                 LostFocus="NumberField_LostFocus"/>
                         <TextBlock x:Name="LoopCountUnit" Text="回" VerticalAlignment="Center" Margin="4,0,0,0"
                                    Visibility="Collapsed"/>
                     </StackPanel>
@@ -393,9 +418,9 @@
                 <!-- 本体: パレット | スクリプト | プレビュー -->
                 <Grid Grid.Row="1">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="240"/>
+                        <ColumnDefinition Width="230"/>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="360"/>
+                        <ColumnDefinition Width="380"/>
                     </Grid.ColumnDefinitions>
 
                     <!-- パレット -->
@@ -404,36 +429,27 @@
                         <StackPanel Margin="12">
                             <TextBlock Text="ツールボックス" FontWeight="SemiBold" FontSize="13" Margin="2,2,0,10"/>
 
-                            <Button Margin="0,0,0,8" Height="50" HorizontalContentAlignment="Left"
+                            <Button Margin="0,0,0,8" Height="46" HorizontalContentAlignment="Left"
                                     Background="#FF4C97FF" BorderBrush="#FF3B7DDB" Click="AddPress_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="&#x1F3AE;" FontSize="16" Margin="2,0,8,0"/>
-                                    <StackPanel>
-                                        <TextBlock Text="ボタンを押す" FontWeight="Bold" Foreground="White"/>
-                                        <TextBlock Text="押す時間/待機・同時押し対応" FontSize="10" Foreground="#DDFFFFFF"/>
-                                    </StackPanel>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="&#x1F3AE;" FontSize="18" VerticalAlignment="Center" Margin="2,0,10,0"/>
+                                    <TextBlock Text="ボタンを押す" FontWeight="Bold" FontSize="14" Foreground="White" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Button>
 
-                            <Button Margin="0,0,0,8" Height="50" HorizontalContentAlignment="Left"
+                            <Button Margin="0,0,0,8" Height="46" HorizontalContentAlignment="Left"
                                     Background="#FF9966FF" BorderBrush="#FF7A4DDB" Click="AddStick_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="&#x1F579;" FontSize="16" Margin="2,0,8,0"/>
-                                    <StackPanel>
-                                        <TextBlock Text="スティック / 方向" FontWeight="Bold" Foreground="White"/>
-                                        <TextBlock Text="8方向・傾き・時間を指定" FontSize="10" Foreground="#DDFFFFFF"/>
-                                    </StackPanel>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="&#x1F579;" FontSize="18" VerticalAlignment="Center" Margin="2,0,10,0"/>
+                                    <TextBlock Text="スティック / 方向" FontWeight="Bold" FontSize="14" Foreground="White" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Button>
 
-                            <Button Margin="0,0,0,8" Height="50" HorizontalContentAlignment="Left"
+                            <Button Margin="0,0,0,8" Height="46" HorizontalContentAlignment="Left"
                                     Background="#FFFFAB19" BorderBrush="#FFD98E0F" Click="AddWait_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="&#x23F1;" FontSize="16" Margin="2,0,8,0"/>
-                                    <StackPanel>
-                                        <TextBlock Text="待機する" FontWeight="Bold" Foreground="#FF3B2A00"/>
-                                        <TextBlock Text="指定秒だけ何もしない" FontSize="10" Foreground="#993B2A00"/>
-                                    </StackPanel>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="&#x23F1;" FontSize="18" VerticalAlignment="Center" Margin="2,0,10,0"/>
+                                    <TextBlock Text="待機する" FontWeight="Bold" FontSize="14" Foreground="#FF3B2A00" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Button>
 
@@ -442,7 +458,7 @@
                                 <StackPanel>
                                     <TextBlock Text="ヒント" FontWeight="SemiBold" Margin="0,0,0,4"/>
                                     <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource TextDimBrush}"
-                                               Text="ブロックをクリックで追加。▲▼またはドラッグで並べ替え。「ボタンを押す」内の『キー追加』で同時押しにできます。"/>
+                                               Text="クリックで追加。▲▼またはドラッグで並べ替え。「ボタンを押す」内の『キー追加』で同時押しに。"/>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -479,11 +495,10 @@
                             <TextBlock Text="生成されるPython" FontWeight="SemiBold" FontSize="13" Margin="2,0,0,8"/>
                             <Border Grid.Row="1" Background="{StaticResource EditorBgBrush}"
                                     BorderBrush="{StaticResource BorderStrongBrush}" BorderThickness="1" CornerRadius="2">
-                                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="8">
-                                    <TextBox x:Name="PreviewBox" IsReadOnly="True" BorderThickness="0"
-                                             Background="Transparent" FontFamily="{StaticResource CodeFont}" FontSize="12"
-                                             TextWrapping="NoWrap"/>
-                                </ScrollViewer>
+                                <RichTextBox x:Name="PreviewBox" IsReadOnly="True" IsDocumentEnabled="False"
+                                             BorderThickness="0" Background="Transparent" Padding="6"
+                                             VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                                             VerticalContentAlignment="Top"/>
                             </Border>
                         </Grid>
                     </Border>
@@ -492,7 +507,7 @@
         </Grid>
 
         <!-- ===== ステータスバー(VS風) ===== -->
-        <Border Grid.Row="3" Background="{StaticResource PrimaryBrush}" Padding="12,3">
+        <Border x:Name="StatusBar" Grid.Row="3" Background="{StaticResource PrimaryBrush}" Padding="12,3">
             <TextBlock x:Name="StatusText" Text="準備完了" Foreground="White" FontSize="11"/>
         </Border>
     </Grid>
