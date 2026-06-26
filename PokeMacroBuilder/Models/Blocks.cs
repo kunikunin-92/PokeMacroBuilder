@@ -22,7 +22,38 @@ public abstract class MacroBlock : INotifyPropertyChanged
     public abstract string Kind { get; }
 }
 
-/// <summary>同時押し用の1スロット(プルダウン1つ分)。</summary>
+/// <summary>子ブロックを抱える制御フロー系ブロックの基底。</summary>
+public abstract class ContainerBlock : MacroBlock
+{
+    public ObservableCollection<MacroBlock> Children { get; } = new();
+
+    private bool _isTarget;
+    /// <summary>「追加先」として選択されているか。</summary>
+    public bool IsTarget { get => _isTarget; set => Set(ref _isTarget, value); }
+}
+
+// ============================================================
+//  条件(if / while で使用)
+// ============================================================
+public sealed class Condition : INotifyPropertyChanged
+{
+    public event PropertyChangedEventHandler? PropertyChanged;
+    private void On([CallerMemberName] string? n = null) => PropertyChanged?.Invoke(this, new(n));
+
+    private string _var = "cnt";
+    public string Var { get => _var; set { if (_var != value) { _var = value; On(); } } }
+
+    /// <summary>0:== 1:!= 2:&lt; 3:&lt;= 4:&gt; 5:&gt;=</summary>
+    private int _op;
+    public int Op { get => _op; set { if (_op != value) { _op = value; On(); } } }
+
+    private string _value = "0";
+    public string Value { get => _value; set { if (_value != value) { _value = value; On(); } } }
+}
+
+// ============================================================
+//  入力系
+// ============================================================
 public sealed class KeySlot : INotifyPropertyChanged
 {
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -40,7 +71,7 @@ public sealed class KeySlot : INotifyPropertyChanged
     }
 }
 
-/// <summary>ボタンを押す(キーが複数なら同時押し)。</summary>
+/// <summary>ボタンを押す(キーが複数なら同時押し、回数>1で連打)。</summary>
 public sealed class PressBlock : MacroBlock
 {
     public override string Kind => "ボタンを押す";
@@ -53,17 +84,12 @@ public sealed class PressBlock : MacroBlock
     private double _wait = 0.1;
     public double Wait { get => _wait; set => Set(ref _wait, value); }
 
-    public PressBlock()
-    {
-        Keys.Add(new KeySlot());
-    }
+    private int _repeat = 1;
+    public int Repeat { get => _repeat; set => Set(ref _repeat, value); }
 
+    public PressBlock() => Keys.Add(new KeySlot());
     public void AddKey() => Keys.Add(new KeySlot());
-
-    public void RemoveKey(KeySlot slot)
-    {
-        if (Keys.Count > 1) Keys.Remove(slot);
-    }
+    public void RemoveKey(KeySlot slot) { if (Keys.Count > 1) Keys.Remove(slot); }
 }
 
 /// <summary>スティック / 方向キーを倒す(8方向)。</summary>
@@ -71,20 +97,32 @@ public sealed class StickBlock : MacroBlock
 {
     public override string Kind => "スティック / 方向";
 
-    /// <summary>0=十字キー(Hat), 1=左スティック, 2=右スティック</summary>
-    private int _device = 1;
+    private int _device = 1;     // 0=Hat,1=L,2=R
     public int Device { get => _device; set => Set(ref _device, value); }
 
-    /// <summary>方向 0..7 (上,右上,右,右下,下,左下,左,左上)</summary>
-    private int _direction = 0;
+    private int _direction;      // 0..7
     public int Direction { get => _direction; set => Set(ref _direction, value); }
 
-    /// <summary>傾き(%) 1..100。十字キーでは無視される。</summary>
     private double _magnitude = 100;
     public double Magnitude { get => _magnitude; set => Set(ref _magnitude, value); }
 
     private double _duration = 0.5;
     public double Duration { get => _duration; set => Set(ref _duration, value); }
+
+    private double _wait = 0.1;
+    public double Wait { get => _wait; set => Set(ref _wait, value); }
+}
+
+/// <summary>ボタンを押し続ける / 離す。</summary>
+public sealed class HoldBlock : MacroBlock
+{
+    public override string Kind => "長押し / 離す";
+
+    /// <summary>0:押し続ける 1:離す</summary>
+    private int _mode;
+    public int Mode { get => _mode; set => Set(ref _mode, value); }
+
+    public KeySlot Key { get; } = new();
 
     private double _wait = 0.1;
     public double Wait { get => _wait; set => Set(ref _wait, value); }
@@ -97,6 +135,86 @@ public sealed class WaitBlock : MacroBlock
 
     private double _seconds = 1.0;
     public double Seconds { get => _seconds; set => Set(ref _seconds, value); }
+}
+
+// ============================================================
+//  制御フロー系(コンテナ)
+// ============================================================
+public sealed class RepeatBlock : ContainerBlock
+{
+    public override string Kind => "くり返す (回数)";
+
+    private int _count = 10;
+    public int Count { get => _count; set => Set(ref _count, value); }
+}
+
+public sealed class ForeverBlock : ContainerBlock
+{
+    public override string Kind => "ずっとくり返す";
+}
+
+public sealed class WhileBlock : ContainerBlock
+{
+    public override string Kind => "条件の間くり返す";
+    public Condition Condition { get; } = new();
+}
+
+public sealed class IfBlock : ContainerBlock
+{
+    public override string Kind => "もし〜なら";
+    public Condition Condition { get; } = new();
+
+    public ObservableCollection<MacroBlock> ElseChildren { get; } = new();
+
+    private bool _hasElse;
+    public bool HasElse { get => _hasElse; set => Set(ref _hasElse, value); }
+}
+
+// ============================================================
+//  変数・通知・画面
+// ============================================================
+public sealed class VariableBlock : MacroBlock
+{
+    public override string Kind => "変数";
+
+    private string _name = "cnt";
+    public string Name { get => _name; set => Set(ref _name, value); }
+
+    /// <summary>0:= 1:+=</summary>
+    private int _op;
+    public int Op { get => _op; set => Set(ref _op, value); }
+
+    private string _value = "0";
+    public string Value { get => _value; set => Set(ref _value, value); }
+}
+
+public sealed class LogBlock : MacroBlock
+{
+    public override string Kind => "ログ出力";
+
+    private string _text = "メッセージ";
+    public string Text { get => _text; set => Set(ref _text, value); }
+}
+
+public sealed class NotifyBlock : MacroBlock
+{
+    public override string Kind => "通知";
+
+    /// <summary>0:LINE 1:Discord</summary>
+    private int _channel;
+    public int Channel { get => _channel; set => Set(ref _channel, value); }
+
+    private string _text = "通知メッセージ";
+    public string Text { get => _text; set => Set(ref _text, value); }
+}
+
+/// <summary>画面をキャプチャして保存する(ImageProcPythonCommand が必要)。</summary>
+public sealed class ScreenshotBlock : MacroBlock
+{
+    public override string Kind => "スクショ保存";
+
+    private string _name = "";
+    public string Name { get => _name; set => Set(ref _name, value); }
 }
 
 /// <summary>スティック方向のコード/角度マッピング。index: 0上,1右上,2右,3右下,4下,5左下,6左,7左上</summary>
@@ -122,6 +240,5 @@ public static class StickMaps
 
     public static readonly int[] Angles = { 90, 45, 0, -45, -90, -135, 180, 135 };
 
-    /// <summary>方向グリフ(3x3表示用)。</summary>
     public static readonly string[] Glyphs = { "↑", "↗", "→", "↘", "↓", "↙", "←", "↖" };
 }

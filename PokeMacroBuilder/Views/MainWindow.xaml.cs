@@ -32,12 +32,18 @@ public partial class MainWindow : Window
     private string _idleStatus = "準備完了";
     private readonly DispatcherTimer _statusTimer = new() { Interval = TimeSpan.FromSeconds(3) };
 
+    // 追加先(ネスト対応)
+    private ObservableCollection<MacroBlock>? _targetCollection;
+    private ContainerBlock? _targetContainer;
+
     // ドラッグ並べ替え状態
     private bool _dragArmed;
     private bool _dragging;
     private Point _dragStart;
     private Point _grab;
     private MacroBlock? _dragBlock;
+    private ItemsControl? _dragHost;
+    private ObservableCollection<MacroBlock>? _dragCollection;
     private FrameworkElement? _dragContainer;
     private DragGhostAdorner? _ghost;
     private AdornerLayer? _ghostLayer;
@@ -93,6 +99,7 @@ public partial class MainWindow : Window
         LoopCountBox.Text = doc.LoopCount.ToString(CultureInfo.InvariantCulture);
         BlocksHost.ItemsSource = doc.Blocks;
         SetBlocksSubscription(doc);
+        ResetTarget(doc);
 
         HomePanel.Visibility = Visibility.Collapsed;
         EditorPanel.Visibility = Visibility.Visible;
@@ -387,9 +394,77 @@ public partial class MainWindow : Window
         EmptyScriptHint.Visibility = _activeDoc.Blocks.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    private void AddPress_Click(object sender, RoutedEventArgs e) => _activeDoc?.Blocks.Add(new PressBlock());
-    private void AddStick_Click(object sender, RoutedEventArgs e) => _activeDoc?.Blocks.Add(new StickBlock());
-    private void AddWait_Click(object sender, RoutedEventArgs e) => _activeDoc?.Blocks.Add(new WaitBlock());
+    // ---- ブロック追加(追加先=ルート or 選択中コンテナ) ----
+    private void AddToTarget(MacroBlock b)
+    {
+        if (_activeDoc is null) return;
+        var coll = _targetCollection ?? _activeDoc.Blocks;
+        coll.Add(b);
+        UpdateEditorHints();
+        UpdatePreview();
+    }
+
+    private void AddPress_Click(object sender, RoutedEventArgs e) => AddToTarget(new PressBlock());
+    private void AddStick_Click(object sender, RoutedEventArgs e) => AddToTarget(new StickBlock());
+    private void AddHold_Click(object sender, RoutedEventArgs e) => AddToTarget(new HoldBlock());
+    private void AddWait_Click(object sender, RoutedEventArgs e) => AddToTarget(new WaitBlock());
+    private void AddRepeat_Click(object sender, RoutedEventArgs e) => AddToTarget(new RepeatBlock());
+    private void AddForever_Click(object sender, RoutedEventArgs e) => AddToTarget(new ForeverBlock());
+    private void AddWhile_Click(object sender, RoutedEventArgs e) => AddToTarget(new WhileBlock());
+    private void AddIf_Click(object sender, RoutedEventArgs e) => AddToTarget(new IfBlock());
+    private void AddVariable_Click(object sender, RoutedEventArgs e) => AddToTarget(new VariableBlock());
+    private void AddLog_Click(object sender, RoutedEventArgs e) => AddToTarget(new LogBlock());
+    private void AddNotify_Click(object sender, RoutedEventArgs e) => AddToTarget(new NotifyBlock());
+    private void AddScreenshot_Click(object sender, RoutedEventArgs e) => AddToTarget(new ScreenshotBlock());
+
+    // ---- 追加先(ターゲット)選択 ----
+    private void SetTargetHere_Click(object sender, RoutedEventArgs e)
+    {
+        if (((FrameworkElement)sender).DataContext is not ContainerBlock c || _activeDoc is null) return;
+        ClearTargets();
+        c.IsTarget = true;
+        _targetContainer = c;
+        _targetCollection = c.Children;
+        UpdateTargetLabel();
+    }
+
+    private void ResetTarget_Click(object sender, RoutedEventArgs e)
+    {
+        if (_activeDoc != null) ResetTarget(_activeDoc);
+    }
+
+    private void ResetTarget(MacroDocument doc)
+    {
+        ClearTargets();
+        _targetContainer = null;
+        _targetCollection = doc.Blocks;
+        UpdateTargetLabel();
+    }
+
+    private void ClearTargets()
+    {
+        if (_activeDoc is null) return;
+        foreach (var b in PythonGenerator.AllBlocks(_activeDoc.Blocks))
+            if (b is ContainerBlock cb) cb.IsTarget = false;
+    }
+
+    private void UpdateTargetLabel()
+    {
+        TargetLabel.Text = _targetContainer is null ? "ルート" : _targetContainer.Kind;
+    }
+
+    private void IfElseToggle_Click(object sender, RoutedEventArgs e)
+    {
+        if (((FrameworkElement)sender).DataContext is IfBlock ib)
+        {
+            ib.HasElse = !ib.HasElse;
+            UpdatePreview();
+        }
+    }
+
+    // 条件・テキスト等の編集 → プレビュー更新
+    private void Field_LostFocus(object sender, RoutedEventArgs e) => UpdatePreview();
+    private void Field_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdatePreview();
 
     private void PadButton_Click(object sender, RoutedEventArgs e)
     {
@@ -416,7 +491,7 @@ public partial class MainWindow : Window
     private void RemoveKeySlot_Click(object sender, RoutedEventArgs e)
     {
         if (_activeDoc is null || ((FrameworkElement)sender).DataContext is not KeySlot slot) return;
-        foreach (var block in _activeDoc.Blocks)
+        foreach (var block in PythonGenerator.AllBlocks(_activeDoc.Blocks))
         {
             if (block is PressBlock p && p.Keys.Contains(slot))
             {
@@ -430,30 +505,73 @@ public partial class MainWindow : Window
     private void MoveUp_Click(object sender, RoutedEventArgs e)
     {
         if (_activeDoc is null || ((FrameworkElement)sender).DataContext is not MacroBlock b) return;
-        int i = _activeDoc.Blocks.IndexOf(b);
-        if (i > 0) _activeDoc.Blocks.Move(i, i - 1);
+        var coll = FindParentCollection(b);
+        int i = coll?.IndexOf(b) ?? -1;
+        if (coll != null && i > 0) { coll.Move(i, i - 1); UpdatePreview(); }
     }
 
     private void MoveDown_Click(object sender, RoutedEventArgs e)
     {
         if (_activeDoc is null || ((FrameworkElement)sender).DataContext is not MacroBlock b) return;
-        int i = _activeDoc.Blocks.IndexOf(b);
-        if (i >= 0 && i < _activeDoc.Blocks.Count - 1) _activeDoc.Blocks.Move(i, i + 1);
+        var coll = FindParentCollection(b);
+        int i = coll?.IndexOf(b) ?? -1;
+        if (coll != null && i >= 0 && i < coll.Count - 1) { coll.Move(i, i + 1); UpdatePreview(); }
     }
 
     private void DeleteBlock_Click(object sender, RoutedEventArgs e)
     {
-        if (_activeDoc != null && ((FrameworkElement)sender).DataContext is MacroBlock b)
-            _activeDoc.Blocks.Remove(b);
+        if (_activeDoc is null || ((FrameworkElement)sender).DataContext is not MacroBlock b) return;
+        var coll = FindParentCollection(b);
+        coll?.Remove(b);
+        // 追加先がツリーから消えたらルートへ
+        if (_targetContainer != null && !PythonGenerator.AllBlocks(_activeDoc.Blocks).Contains(_targetContainer))
+            ResetTarget(_activeDoc);
+        UpdateEditorHints();
+        UpdatePreview();
     }
 
-    // ---- ドラッグ並べ替え(ゴースト追従 + 周囲がリアルタイムで避ける) ----
+    /// <summary>ブロックの親コレクション(ルート/コンテナのChildren/Else)を返す。</summary>
+    private ObservableCollection<MacroBlock>? FindParentCollection(MacroBlock target)
+    {
+        if (_activeDoc is null) return null;
+        return Search(_activeDoc.Blocks);
+
+        ObservableCollection<MacroBlock>? Search(ObservableCollection<MacroBlock> coll)
+        {
+            if (coll.Contains(target)) return coll;
+            foreach (var b in coll)
+            {
+                if (b is IfBlock ib)
+                {
+                    var r = Search(ib.Children) ?? Search(ib.ElseChildren);
+                    if (r != null) return r;
+                }
+                else if (b is ContainerBlock cb)
+                {
+                    var r = Search(cb.Children);
+                    if (r != null) return r;
+                }
+            }
+            return null;
+        }
+    }
+
+    // ---- ドラッグ並べ替え(同じ親の中で。ゴースト追従 + 周囲がリアルタイムで避ける) ----
     private void BlocksHost_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (IsOverInteractive(e.OriginalSource as DependencyObject)) { _dragArmed = false; return; }
-        _dragBlock = FindBlock(e.OriginalSource as DependencyObject);
+        _dragArmed = false;
+        if (IsOverInteractive(e.OriginalSource as DependencyObject)) return;
+
+        var host = FindItemsHost(e.OriginalSource as DependencyObject);
+        var block = FindBlock(e.OriginalSource as DependencyObject);
+        if (host is null || block is null) return;
+        if (host.ItemsSource is not ObservableCollection<MacroBlock> coll || !coll.Contains(block)) return;
+
+        _dragHost = host;
+        _dragCollection = coll;
+        _dragBlock = block;
         _dragStart = e.GetPosition(BlocksHost);
-        _dragArmed = _dragBlock != null;
+        _dragArmed = true;
     }
 
     private void BlocksHost_PreviewMouseMove(object sender, MouseEventArgs e)
@@ -461,18 +579,18 @@ public partial class MainWindow : Window
         if (!_dragArmed || _dragBlock is null) return;
         if (e.LeftButton != MouseButtonState.Pressed) return;
 
-        var pos = e.GetPosition(BlocksHost);
+        var posRoot = e.GetPosition(BlocksHost);
         if (!_dragging)
         {
-            if (Math.Abs(pos.X - _dragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
-                Math.Abs(pos.Y - _dragStart.Y) < SystemParameters.MinimumVerticalDragDistance)
+            if (Math.Abs(posRoot.X - _dragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
+                Math.Abs(posRoot.Y - _dragStart.Y) < SystemParameters.MinimumVerticalDragDistance)
                 return;
             BeginDrag(e);
             if (!_dragging) return;
         }
 
-        _ghost?.UpdatePosition(new Point(pos.X - _grab.X, pos.Y - _grab.Y));
-        ReorderTo(pos);
+        _ghost?.UpdatePosition(new Point(posRoot.X - _grab.X, posRoot.Y - _grab.Y));
+        if (_dragHost != null) ReorderTo(e.GetPosition(_dragHost));
         AutoScroll(e);
     }
 
@@ -480,8 +598,8 @@ public partial class MainWindow : Window
 
     private void BeginDrag(MouseEventArgs e)
     {
-        if (_dragBlock is null) return;
-        _dragContainer = BlocksHost.ItemContainerGenerator.ContainerFromItem(_dragBlock) as FrameworkElement;
+        if (_dragBlock is null || _dragHost is null) return;
+        _dragContainer = _dragHost.ItemContainerGenerator.ContainerFromItem(_dragBlock) as FrameworkElement;
         if (_dragContainer is null || _dragContainer.ActualWidth < 1 || _dragContainer.ActualHeight < 1)
         {
             _dragArmed = false;
@@ -509,22 +627,21 @@ public partial class MainWindow : Window
 
     private void ReorderTo(Point posInHost)
     {
-        if (_activeDoc is null || _dragBlock is null) return;
-        int from = _activeDoc.Blocks.IndexOf(_dragBlock);
+        if (_dragHost is null || _dragCollection is null || _dragBlock is null) return;
+        int from = _dragCollection.IndexOf(_dragBlock);
         if (from < 0) return;
 
-        // ドラッグ中ブロックを除き、中心がカーソルより上にあるブロック数 = 挿入位置(上下対称)
         int insert = 0;
-        for (int i = 0; i < _activeDoc.Blocks.Count; i++)
+        for (int i = 0; i < _dragCollection.Count; i++)
         {
             if (i == from) continue;
-            if (BlocksHost.ItemContainerGenerator.ContainerFromIndex(i) is not FrameworkElement c) continue;
-            double center = c.TranslatePoint(new Point(0, c.ActualHeight / 2), BlocksHost).Y;
+            if (_dragHost.ItemContainerGenerator.ContainerFromIndex(i) is not FrameworkElement c) continue;
+            double center = c.TranslatePoint(new Point(0, c.ActualHeight / 2), _dragHost).Y;
             if (posInHost.Y > center) insert++;
             else break;
         }
 
-        if (insert != from) _activeDoc.Blocks.Move(from, insert);
+        if (insert != from) _dragCollection.Move(from, insert);
     }
 
     private void AutoScroll(MouseEventArgs e)
@@ -540,6 +657,7 @@ public partial class MainWindow : Window
 
     private void EndDrag()
     {
+        bool wasDragging = _dragging;
         if (_ghost != null && _ghostLayer != null)
         {
             _ghostLayer.Remove(_ghost);
@@ -556,6 +674,10 @@ public partial class MainWindow : Window
         _dragging = false;
         _dragArmed = false;
         _dragBlock = null;
+        _dragHost = null;
+        _dragCollection = null;
+
+        if (wasDragging) UpdatePreview();
     }
 
     private static MacroBlock? FindBlock(DependencyObject? src)
@@ -563,6 +685,17 @@ public partial class MainWindow : Window
         while (src != null)
         {
             if (src is FrameworkElement fe && fe.DataContext is MacroBlock b) return b;
+            src = VisualTreeHelper.GetParent(src);
+        }
+        return null;
+    }
+
+    /// <summary>visualツリーを上にたどり、最も近い ItemsControl(ブロックのホスト)を返す。</summary>
+    private static ItemsControl? FindItemsHost(DependencyObject? src)
+    {
+        while (src != null)
+        {
+            if (src is ItemsControl ic) return ic;
             src = VisualTreeHelper.GetParent(src);
         }
         return null;
