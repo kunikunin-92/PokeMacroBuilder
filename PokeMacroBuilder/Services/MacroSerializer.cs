@@ -18,11 +18,14 @@ internal sealed class MacroDto
 
 internal sealed class BlockDto
 {
-    public string Kind { get; set; } = "";          // "press" / "wait"
+    public string Kind { get; set; } = "";          // "press" / "stick" / "wait"
     public List<string>? Keys { get; set; }          // press: 押すキーのCodeリスト
     public double Duration { get; set; }
     public double Wait { get; set; }
     public double Seconds { get; set; }              // wait用
+    public int Device { get; set; }                  // stick: 0=Hat,1=L,2=R
+    public int Direction { get; set; }               // stick: 0..7
+    public double Magnitude { get; set; } = 100;      // stick: 傾き%
 }
 
 /// <summary>
@@ -61,6 +64,17 @@ public static class MacroSerializer
                         Keys = keys,
                         Duration = p.Duration,
                         Wait = p.Wait,
+                    });
+                    break;
+                case StickBlock s:
+                    dto.Blocks.Add(new BlockDto
+                    {
+                        Kind = "stick",
+                        Device = s.Device,
+                        Direction = s.Direction,
+                        Magnitude = s.Magnitude,
+                        Duration = s.Duration,
+                        Wait = s.Wait,
                     });
                     break;
                 case WaitBlock w:
@@ -117,6 +131,17 @@ public static class MacroSerializer
                         pb.Keys.Add(new KeySlot());
                     }
                     doc.Blocks.Add(pb);
+                }
+                else if (b.Kind == "stick")
+                {
+                    doc.Blocks.Add(new StickBlock
+                    {
+                        Device = b.Device is >= 0 and <= 2 ? b.Device : 1,
+                        Direction = b.Direction is >= 0 and < 8 ? b.Direction : 0,
+                        Magnitude = b.Magnitude is > 0 and <= 100 ? b.Magnitude : 100,
+                        Duration = b.Duration,
+                        Wait = b.Wait,
+                    });
                 }
                 else if (b.Kind == "wait")
                 {

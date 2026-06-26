@@ -4,8 +4,10 @@ using System.Collections.Specialized;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using Microsoft.Win32;
 using PokeMacroBuilder.Models;
 using PokeMacroBuilder.Services;
@@ -19,13 +21,21 @@ public partial class MainWindow : Window
     private MacroDocument? _doc;          // 編集中のマクロ
     private bool _editorLoaded;
 
+    // ---- ドラッグ並べ替えの状態 ----
+    private bool _dragArmed;
+    private bool _dragging;
     private Point _dragStart;
+    private Point _grab;
     private MacroBlock? _dragBlock;
+    private FrameworkElement? _dragContainer;
+    private DragGhostAdorner? _ghost;
+    private AdornerLayer? _ghostLayer;
 
     public MainWindow()
     {
         InitializeComponent();
         _settings = AppSettings.Load();
+        BlocksHost.LostMouseCapture += (_, _) => EndDrag();
 
         Loaded += (_, _) =>
         {
@@ -231,7 +241,24 @@ public partial class MainWindow : Window
     }
 
     private void AddPress_Click(object sender, RoutedEventArgs e) => _doc?.Blocks.Add(new PressBlock());
+    private void AddStick_Click(object sender, RoutedEventArgs e) => _doc?.Blocks.Add(new StickBlock());
     private void AddWait_Click(object sender, RoutedEventArgs e) => _doc?.Blocks.Add(new WaitBlock());
+
+    // スティックの8方向パッド
+    private void PadButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement fe && fe.DataContext is StickBlock sb &&
+            fe.Tag is string t && int.TryParse(t, out var idx))
+        {
+            sb.Direction = idx;
+            UpdatePreview();
+        }
+    }
+
+    private void StickField_Changed(object sender, SelectionChangedEventArgs e) => UpdatePreview();
+
+    // 数値入力欄を確定したらプレビューを更新
+    private void NumberField_LostFocus(object sender, RoutedEventArgs e) => UpdatePreview();
 
     private void AddKeySlot_Click(object sender, RoutedEventArgs e)
     {
@@ -276,41 +303,122 @@ public partial class MainWindow : Window
             _doc.Blocks.Remove(b);
     }
 
-    // ---- ドラッグ並べ替え ----
+    // ---- ドラッグ並べ替え(ゴーストがマウスに追従し、周囲のブロックがリアルタイムで避ける) ----
     private void BlocksHost_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
-        _dragStart = e.GetPosition(null);
-        _dragBlock = IsOverInteractive(e.OriginalSource as DependencyObject)
-            ? null
-            : FindBlock(e.OriginalSource as DependencyObject);
+        // テキスト欄・コンボ・ボタン上ではドラッグ開始しない(通常操作を優先)
+        if (IsOverInteractive(e.OriginalSource as DependencyObject))
+        {
+            _dragArmed = false;
+            return;
+        }
+        _dragBlock = FindBlock(e.OriginalSource as DependencyObject);
+        _dragStart = e.GetPosition(BlocksHost);
+        _dragArmed = _dragBlock != null;
     }
 
     private void BlocksHost_PreviewMouseMove(object sender, MouseEventArgs e)
     {
-        if (e.LeftButton != MouseButtonState.Pressed || _dragBlock is null) return;
-        var pos = e.GetPosition(null);
-        if (Math.Abs(pos.X - _dragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
-            Math.Abs(pos.Y - _dragStart.Y) < SystemParameters.MinimumVerticalDragDistance)
-            return;
+        if (!_dragArmed || _dragBlock is null) return;
+        if (e.LeftButton != MouseButtonState.Pressed) { return; }
 
-        DragDrop.DoDragDrop(BlocksHost, new DataObject("macroblock", _dragBlock), DragDropEffects.Move);
-        _dragBlock = null;
+        var pos = e.GetPosition(BlocksHost);
+
+        if (!_dragging)
+        {
+            if (Math.Abs(pos.X - _dragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
+                Math.Abs(pos.Y - _dragStart.Y) < SystemParameters.MinimumVerticalDragDistance)
+                return;
+            BeginDrag(e);
+            if (!_dragging) return;
+        }
+
+        _ghost?.UpdatePosition(new Point(pos.X - _grab.X, pos.Y - _grab.Y));
+        ReorderTo(pos);
+        AutoScroll(e);
     }
 
-    private void BlocksHost_Drop(object sender, DragEventArgs e)
-    {
-        if (_doc is null || !e.Data.GetDataPresent("macroblock")) return;
-        if (e.Data.GetData("macroblock") is not MacroBlock dragged) return;
+    private void BlocksHost_PreviewMouseUp(object sender, MouseButtonEventArgs e) => EndDrag();
 
-        var target = FindBlock(e.OriginalSource as DependencyObject);
-        int from = _doc.Blocks.IndexOf(dragged);
+    private void BeginDrag(MouseEventArgs e)
+    {
+        if (_dragBlock is null) return;
+        _dragContainer = BlocksHost.ItemContainerGenerator.ContainerFromItem(_dragBlock) as FrameworkElement;
+        if (_dragContainer is null || _dragContainer.ActualWidth < 1 || _dragContainer.ActualHeight < 1)
+        {
+            _dragArmed = false;
+            return;
+        }
+
+        _grab = e.GetPosition(_dragContainer);
+
+        var size = new Size(_dragContainer.ActualWidth, _dragContainer.ActualHeight);
+        var bmp = new RenderTargetBitmap(
+            (int)Math.Ceiling(size.Width), (int)Math.Ceiling(size.Height), 96, 96, PixelFormats.Pbgra32);
+        bmp.Render(_dragContainer);
+        bmp.Freeze();
+
+        _ghostLayer = AdornerLayer.GetAdornerLayer(BlocksHost);
+        if (_ghostLayer is null) { _dragArmed = false; return; }
+
+        _ghost = new DragGhostAdorner(BlocksHost, bmp, size);
+        _ghostLayer.Add(_ghost);
+        _dragContainer.Opacity = 0.35;
+
+        _dragging = true;
+        BlocksHost.CaptureMouse();
+    }
+
+    private void ReorderTo(Point posInHost)
+    {
+        if (_doc is null || _dragBlock is null) return;
+        int from = _doc.Blocks.IndexOf(_dragBlock);
         if (from < 0) return;
 
-        int to = (target is null || ReferenceEquals(target, dragged))
-            ? _doc.Blocks.Count - 1
-            : _doc.Blocks.IndexOf(target);
-        if (to < 0) to = _doc.Blocks.Count - 1;
-        if (from != to) _doc.Blocks.Move(from, to);
+        int target = _doc.Blocks.Count - 1;
+        for (int i = 0; i < _doc.Blocks.Count; i++)
+        {
+            if (BlocksHost.ItemContainerGenerator.ContainerFromIndex(i) is not FrameworkElement c) continue;
+            double top = c.TranslatePoint(new Point(0, 0), BlocksHost).Y;
+            if (posInHost.Y < top + c.ActualHeight / 2)
+            {
+                target = i;
+                break;
+            }
+        }
+
+        if (target != from) _doc.Blocks.Move(from, target);
+    }
+
+    private void AutoScroll(MouseEventArgs e)
+    {
+        if (ScriptScroll is null) return;
+        var p = e.GetPosition(ScriptScroll);
+        const double edge = 40;
+        if (p.Y < edge)
+            ScriptScroll.ScrollToVerticalOffset(ScriptScroll.VerticalOffset - 12);
+        else if (p.Y > ScriptScroll.ActualHeight - edge)
+            ScriptScroll.ScrollToVerticalOffset(ScriptScroll.VerticalOffset + 12);
+    }
+
+    private void EndDrag()
+    {
+        if (_ghost != null && _ghostLayer != null)
+        {
+            _ghostLayer.Remove(_ghost);
+            _ghost = null;
+            _ghostLayer = null;
+        }
+        if (_dragContainer != null)
+        {
+            _dragContainer.Opacity = 1.0;
+            _dragContainer = null;
+        }
+        if (BlocksHost.IsMouseCaptured) BlocksHost.ReleaseMouseCapture();
+
+        _dragging = false;
+        _dragArmed = false;
+        _dragBlock = null;
     }
 
     private static MacroBlock? FindBlock(DependencyObject? src)

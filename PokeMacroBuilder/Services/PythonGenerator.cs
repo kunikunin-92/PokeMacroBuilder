@@ -49,7 +49,7 @@ public static class PythonGenerator
         sb.AppendLine(MacroSerializer.Marker + MacroSerializer.ToBase64(doc));
         sb.AppendLine();
         sb.AppendLine("from Commands.PythonCommandBase import PythonCommand");
-        sb.AppendLine("from Commands.Keys import Button, Direction, Hat");
+        sb.AppendLine("from Commands.Keys import Button, Direction, Hat, Stick");
         sb.AppendLine();
         sb.AppendLine();
         sb.AppendLine($"class {className}(PythonCommand):");
@@ -86,6 +86,9 @@ public static class PythonGenerator
                 case PressBlock p:
                     bodyLines.Add(EmitPress(p));
                     break;
+                case StickBlock s:
+                    bodyLines.Add(EmitStick(s));
+                    break;
                 case WaitBlock w:
                     bodyLines.Add($"self.wait({Num(w.Seconds)})");
                     break;
@@ -115,6 +118,34 @@ public static class PythonGenerator
             : "[" + string.Join(", ", codes) + "]";
 
         return $"self.press({target}, duration={Num(p.Duration)}, wait={Num(p.Wait)})";
+    }
+
+    private static string EmitStick(StickBlock s)
+    {
+        int idx = s.Direction is >= 0 and < 8 ? s.Direction : 0;
+        string target;
+
+        if (s.Device == 0)
+        {
+            // 十字キー(Hat)
+            target = StickMaps.HatCodes[idx];
+        }
+        else
+        {
+            bool right = s.Device == 2;
+            if (s.Magnitude >= 100)
+            {
+                target = right ? StickMaps.RStickConst[idx] : StickMaps.LStickConst[idx];
+            }
+            else
+            {
+                var stick = right ? "Stick.RIGHT" : "Stick.LEFT";
+                var mag = (s.Magnitude < 1 ? 1 : s.Magnitude) / 100.0;
+                target = $"Direction({stick}, {StickMaps.Angles[idx]}, {Num(mag)})";
+            }
+        }
+
+        return $"self.press({target}, duration={Num(s.Duration)}, wait={Num(s.Wait)})";
     }
 
     private static string EscapeSingleQuote(string s) =>
