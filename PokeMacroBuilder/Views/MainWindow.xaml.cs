@@ -552,7 +552,16 @@ public partial class MainWindow : Window
         var res = MessageBox.Show(this, $"「{img.FileName}」を削除しますか?", "削除の確認",
             MessageBoxButton.YesNo, MessageBoxImage.Warning);
         if (res != MessageBoxResult.Yes) return;
-        _store.DeleteImage(_activeDoc, img);
+        try
+        {
+            _store.DeleteImage(_activeDoc, img);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, "削除に失敗しました:\n" + ex.Message, "エラー",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
         LoadImages();
         UpdatePreview();
     }

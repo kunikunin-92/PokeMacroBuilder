@@ -805,8 +805,8 @@
                                                     BorderBrush="{StaticResource BorderStrongBrush}" BorderThickness="1" CornerRadius="3"
                                                     Width="{Binding ThumbWidth, RelativeSource={RelativeSource AncestorType=Window}}">
                                                 <Grid>
-                                                    <!-- 幅に合わせて高さは画像の比率で決まる(縦伸び防止) -->
-                                                    <Image Source="{Binding FullPath}" Stretch="Uniform" Margin="3"
+                                                    <!-- 幅に合わせて高さは画像の比率で決まる(縦伸び防止)。Thumbnailはファイルを掴まない -->
+                                                    <Image Source="{Binding Thumbnail}" Stretch="Uniform" Margin="3"
                                                            ToolTip="{Binding RelRef}"/>
                                                     <Button Content="&#x2715;" Width="20" Height="20" Padding="0" FontSize="10"
                                                             HorizontalAlignment="Right" VerticalAlignment="Top" Margin="2"
