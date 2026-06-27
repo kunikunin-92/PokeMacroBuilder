@@ -43,7 +43,7 @@ public sealed class Condition : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
     private void On([CallerMemberName] string? n = null) => PropertyChanged?.Invoke(this, new(n));
 
-    /// <summary>0:変数の比較 1:画像認識(テンプレ一致)</summary>
+    /// <summary>0:変数の比較 1:画像認識(テンプレ一致) 2:文字認識(OCR)</summary>
     private int _kind;
     public int Kind { get => _kind; set { if (_kind != value) { _kind = value; On(); } } }
 
@@ -65,6 +65,25 @@ public sealed class Condition : INotifyPropertyChanged
     /// <summary>一致率(0.0〜1.0)。</summary>
     private double _threshold = 0.8;
     public double Threshold { get => _threshold; set { if (_threshold != value) { _threshold = value; On(); } } }
+
+    // --- 文字認識(OCR)用 ---
+    private string _ocrText = "";
+    public string OcrText { get => _ocrText; set { if (_ocrText != value) { _ocrText = value; On(); } } }
+
+    /// <summary>0:完全一致(==) 1:含む</summary>
+    private int _ocrMode;
+    public int OcrMode { get => _ocrMode; set { if (_ocrMode != value) { _ocrMode = value; On(); } } }
+
+    /// <summary>0:日本語(jpn) 1:英語(eng)</summary>
+    private int _ocrLang;
+    public int OcrLang { get => _ocrLang; set { if (_ocrLang != value) { _ocrLang = value; On(); } } }
+
+    // 認識範囲(0,0,0,0 なら画面全体)
+    private int _ocrX, _ocrY, _ocrW, _ocrH;
+    public int OcrX { get => _ocrX; set { if (_ocrX != value) { _ocrX = value; On(); } } }
+    public int OcrY { get => _ocrY; set { if (_ocrY != value) { _ocrY = value; On(); } } }
+    public int OcrW { get => _ocrW; set { if (_ocrW != value) { _ocrW = value; On(); } } }
+    public int OcrH { get => _ocrH; set { if (_ocrH != value) { _ocrH = value; On(); } } }
 }
 
 // ============================================================

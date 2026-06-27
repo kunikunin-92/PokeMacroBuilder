@@ -27,10 +27,11 @@
         <!-- ===== 条件エディタ(変数比較 / 画像認識) ===== -->
         <DataTemplate DataType="{x:Type models:Condition}">
             <StackPanel Orientation="Horizontal">
-                <ComboBox Width="72" Height="28" SelectedIndex="{Binding Kind, Mode=TwoWay}"
-                          SelectionChanged="Field_SelectionChanged">
+                <ComboBox Width="80" Height="28" SelectedIndex="{Binding Kind, Mode=TwoWay}"
+                          SelectionChanged="ConditionKind_Changed">
                     <ComboBoxItem Content="変数"/>
                     <ComboBoxItem Content="画像"/>
+                    <ComboBoxItem Content="文字(OCR)"/>
                 </ComboBox>
 
                 <!-- 変数比較 -->
@@ -56,11 +57,35 @@
                     <TextBox Width="52" Height="28" LostFocus="Field_LostFocus"
                              ToolTip="0〜1 (例: 0.8)" Text="{Binding Threshold, StringFormat=0.##, UpdateSourceTrigger=LostFocus}"/>
                 </StackPanel>
+
+                <!-- 文字認識(OCR) -->
+                <StackPanel x:Name="condOcr" Orientation="Horizontal" Margin="6,0,0,0" Visibility="Collapsed">
+                    <ComboBox Width="64" Height="28" SelectedIndex="{Binding OcrLang, Mode=TwoWay}"
+                              SelectionChanged="Field_SelectionChanged" ToolTip="言語">
+                        <ComboBoxItem Content="日本語"/><ComboBoxItem Content="英語"/>
+                    </ComboBox>
+                    <TextBox Width="120" Height="28" Margin="4,0,0,0" LostFocus="Field_LostFocus"
+                             ToolTip="期待する文字列" Text="{Binding OcrText, UpdateSourceTrigger=LostFocus}"/>
+                    <ComboBox Width="72" Height="28" Margin="4,0,0,0" SelectedIndex="{Binding OcrMode, Mode=TwoWay}"
+                              SelectionChanged="Field_SelectionChanged">
+                        <ComboBoxItem Content="と一致"/><ComboBoxItem Content="を含む"/>
+                    </ComboBox>
+                    <TextBlock Text="範囲" Foreground="#FF3B2A00" VerticalAlignment="Center" Margin="8,0,4,0"
+                               ToolTip="0,0,0,0なら画面全体"/>
+                    <TextBox Width="44" Height="28" LostFocus="Field_LostFocus" ToolTip="X" Text="{Binding OcrX, UpdateSourceTrigger=LostFocus}"/>
+                    <TextBox Width="44" Height="28" Margin="3,0,0,0" LostFocus="Field_LostFocus" ToolTip="Y" Text="{Binding OcrY, UpdateSourceTrigger=LostFocus}"/>
+                    <TextBox Width="44" Height="28" Margin="3,0,0,0" LostFocus="Field_LostFocus" ToolTip="幅" Text="{Binding OcrW, UpdateSourceTrigger=LostFocus}"/>
+                    <TextBox Width="44" Height="28" Margin="3,0,0,0" LostFocus="Field_LostFocus" ToolTip="高さ" Text="{Binding OcrH, UpdateSourceTrigger=LostFocus}"/>
+                </StackPanel>
             </StackPanel>
             <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding Kind}" Value="1">
                     <Setter TargetName="condVar" Property="Visibility" Value="Collapsed"/>
                     <Setter TargetName="condImg" Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="2">
+                    <Setter TargetName="condVar" Property="Visibility" Value="Collapsed"/>
+                    <Setter TargetName="condOcr" Property="Visibility" Value="Visible"/>
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
@@ -546,6 +571,7 @@
                 <MenuItem x:Name="RecentMenu" Header="最近の項目(_R)"/>
                 <MenuItem Header="上書き保存(_S)" InputGestureText="Ctrl+S" Click="MenuSave_Click"/>
                 <MenuItem Header="名前を付けて保存（コピー）(_C)" Click="MenuSaveAsCopy_Click"/>
+                <MenuItem Header="設定(_E)..." Click="MenuSettings_Click"/>
                 <MenuItem Header="終了(_X)" Click="MenuExit_Click"/>
             </MenuItem>
             <MenuItem Header="表示(_V)" Style="{StaticResource TopMenuItem}">

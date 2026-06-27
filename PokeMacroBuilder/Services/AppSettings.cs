@@ -10,6 +10,12 @@ public sealed class AppSettings
 {
     public string? LastWorkspace { get; set; }
 
+    /// <summary>tesseract.exe の絶対パス(OCR用)。</summary>
+    public string? TesseractPath { get; set; }
+
+    /// <summary>テーマ名 ("Dark" / "Light")。</summary>
+    public string Theme { get; set; } = "Dark";
+
     /// <summary>最近開いたマクロのファイルパス(新しい順)。</summary>
     public List<string> RecentFiles { get; set; } = new();
 

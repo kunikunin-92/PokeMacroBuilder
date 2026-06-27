@@ -41,6 +41,13 @@ internal sealed class BlockDto
     public string CondValue { get; set; } = "0";
     public string CondImageRef { get; set; } = "";
     public double CondThreshold { get; set; } = 0.8;
+    public string CondOcrText { get; set; } = "";
+    public int CondOcrMode { get; set; }
+    public int CondOcrLang { get; set; }
+    public int CondOcrX { get; set; }
+    public int CondOcrY { get; set; }
+    public int CondOcrW { get; set; }
+    public int CondOcrH { get; set; }
     public bool HasElse { get; set; }
     public List<BlockDto>? Children { get; set; }
     public List<BlockDto>? ElseChildren { get; set; }
@@ -63,6 +70,13 @@ internal sealed class ElseIfDto
     public string CondValue { get; set; } = "0";
     public string CondImageRef { get; set; } = "";
     public double CondThreshold { get; set; } = 0.8;
+    public string CondOcrText { get; set; } = "";
+    public int CondOcrMode { get; set; }
+    public int CondOcrLang { get; set; }
+    public int CondOcrX { get; set; }
+    public int CondOcrY { get; set; }
+    public int CondOcrW { get; set; }
+    public int CondOcrH { get; set; }
     public List<BlockDto> Children { get; set; } = new();
 }
 
@@ -149,29 +163,29 @@ public static class MacroSerializer
             case WaitBlock w:
                 return new BlockDto { Kind = "wait", Seconds = w.Seconds };
             case LoopBlock lp:
-                return new BlockDto
+                var lpd = new BlockDto
                 {
                     Kind = "loop", LoopKind = lp.LoopKind, Count = lp.Count,
-                    CondKind = lp.Condition.Kind, CondVar = lp.Condition.Var, CondOp = lp.Condition.Op,
-                    CondValue = lp.Condition.Value, CondImageRef = lp.Condition.ImageRef, CondThreshold = lp.Condition.Threshold,
                     Children = lp.Children.Select(BuildBlock).ToList(),
                 };
+                WriteCond(lp.Condition, lpd);
+                return lpd;
             case IfBlock ib:
-                return new BlockDto
+                var ifd = new BlockDto
                 {
                     Kind = "if",
-                    CondKind = ib.Condition.Kind, CondVar = ib.Condition.Var, CondOp = ib.Condition.Op,
-                    CondValue = ib.Condition.Value, CondImageRef = ib.Condition.ImageRef, CondThreshold = ib.Condition.Threshold,
                     HasElse = ib.HasElse,
                     Children = ib.Children.Select(BuildBlock).ToList(),
                     ElseChildren = ib.ElseChildren.Select(BuildBlock).ToList(),
-                    ElseIfs = ib.ElseIfs.Select(br => new ElseIfDto
+                    ElseIfs = ib.ElseIfs.Select(br =>
                     {
-                        CondKind = br.Condition.Kind, CondVar = br.Condition.Var, CondOp = br.Condition.Op,
-                        CondValue = br.Condition.Value, CondImageRef = br.Condition.ImageRef, CondThreshold = br.Condition.Threshold,
-                        Children = br.Children.Select(BuildBlock).ToList(),
+                        var ed = new ElseIfDto { Children = br.Children.Select(BuildBlock).ToList() };
+                        WriteCond(br.Condition, ed);
+                        return ed;
                     }).ToList(),
                 };
+                WriteCond(ib.Condition, ifd);
+                return ifd;
             case VariableBlock v:
                 return new BlockDto { Kind = "var", VarName = v.Name, VarOp = v.Op, VarValue = v.Value };
             case LogBlock l:
@@ -211,7 +225,7 @@ public static class MacroSerializer
                 };
             case "loop":
                 var lp = new LoopBlock { LoopKind = b.LoopKind is >= 0 and <= 2 ? b.LoopKind : 1, Count = b.Count };
-                LoadCond(lp.Condition, b.CondKind, b.CondVar, b.CondOp, b.CondValue, b.CondImageRef, b.CondThreshold);
+                ReadCond(lp.Condition, b);
                 Fill(lp.Children, b.Children);
                 return lp;
             // ---- 旧形式の互換読み込み ----
@@ -235,14 +249,14 @@ public static class MacroSerializer
                 return oldWhile;
             case "if":
                 var ifb = new IfBlock { HasElse = b.HasElse };
-                LoadCond(ifb.Condition, b.CondKind, b.CondVar, b.CondOp, b.CondValue, b.CondImageRef, b.CondThreshold);
+                ReadCond(ifb.Condition, b);
                 Fill(ifb.Children, b.Children);
                 Fill(ifb.ElseChildren, b.ElseChildren);
                 if (b.ElseIfs != null)
                     foreach (var ed in b.ElseIfs)
                     {
                         var br = new ElseIfBranch();
-                        LoadCond(br.Condition, ed.CondKind, ed.CondVar, ed.CondOp, ed.CondValue, ed.CondImageRef, ed.CondThreshold);
+                        ReadCond(br.Condition, ed);
                         Fill(br.Children, ed.Children);
                         ifb.ElseIfs.Add(br);
                     }
@@ -266,13 +280,38 @@ public static class MacroSerializer
         foreach (var c in src) dest.Add(BuildModel(c));
     }
 
-    private static void LoadCond(Condition c, int kind, string var, int op, string value, string imageRef, double threshold)
+    private static void WriteCond(Condition c, BlockDto d)
     {
-        c.Kind = kind is 0 or 1 ? kind : 0;
-        c.Var = var;
-        c.Op = op;
-        c.Value = value;
+        d.CondKind = c.Kind; d.CondVar = c.Var; d.CondOp = c.Op; d.CondValue = c.Value;
+        d.CondImageRef = c.ImageRef; d.CondThreshold = c.Threshold;
+        d.CondOcrText = c.OcrText; d.CondOcrMode = c.OcrMode; d.CondOcrLang = c.OcrLang;
+        d.CondOcrX = c.OcrX; d.CondOcrY = c.OcrY; d.CondOcrW = c.OcrW; d.CondOcrH = c.OcrH;
+    }
+
+    private static void WriteCond(Condition c, ElseIfDto d)
+    {
+        d.CondKind = c.Kind; d.CondVar = c.Var; d.CondOp = c.Op; d.CondValue = c.Value;
+        d.CondImageRef = c.ImageRef; d.CondThreshold = c.Threshold;
+        d.CondOcrText = c.OcrText; d.CondOcrMode = c.OcrMode; d.CondOcrLang = c.OcrLang;
+        d.CondOcrX = c.OcrX; d.CondOcrY = c.OcrY; d.CondOcrW = c.OcrW; d.CondOcrH = c.OcrH;
+    }
+
+    private static void ReadCond(Condition c, BlockDto d) =>
+        SetCond(c, d.CondKind, d.CondVar, d.CondOp, d.CondValue, d.CondImageRef, d.CondThreshold,
+            d.CondOcrText, d.CondOcrMode, d.CondOcrLang, d.CondOcrX, d.CondOcrY, d.CondOcrW, d.CondOcrH);
+
+    private static void ReadCond(Condition c, ElseIfDto d) =>
+        SetCond(c, d.CondKind, d.CondVar, d.CondOp, d.CondValue, d.CondImageRef, d.CondThreshold,
+            d.CondOcrText, d.CondOcrMode, d.CondOcrLang, d.CondOcrX, d.CondOcrY, d.CondOcrW, d.CondOcrH);
+
+    private static void SetCond(Condition c, int kind, string var, int op, string value, string imageRef, double threshold,
+        string ocrText, int ocrMode, int ocrLang, int ocrX, int ocrY, int ocrW, int ocrH)
+    {
+        c.Kind = kind is >= 0 and <= 2 ? kind : 0;
+        c.Var = var; c.Op = op; c.Value = value;
         c.ImageRef = imageRef ?? "";
         c.Threshold = threshold is > 0 and <= 1 ? threshold : 0.8;
+        c.OcrText = ocrText ?? ""; c.OcrMode = ocrMode; c.OcrLang = ocrLang;
+        c.OcrX = ocrX; c.OcrY = ocrY; c.OcrW = ocrW; c.OcrH = ocrH;
     }
 }

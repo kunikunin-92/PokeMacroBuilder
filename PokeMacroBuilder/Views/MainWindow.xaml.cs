@@ -73,6 +73,9 @@ public partial class MainWindow : Window
         BlocksHost.LostMouseCapture += (_, _) => EndDrag();
         _statusTimer.Tick += (_, _) => { _statusTimer.Stop(); StatusText.Text = _idleStatus; };
 
+        Themes.ThemeManager.Apply(_settings.Theme);
+        PythonGenerator.TesseractPath = _settings.TesseractPath;
+
         Loaded += (_, _) =>
         {
             if (!string.IsNullOrEmpty(_settings.LastWorkspace))
@@ -215,6 +218,22 @@ public partial class MainWindow : Window
     {
         if (_activeDoc is null) RefreshList();
     }
+    private void MenuSettings_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new SettingsWindow(_settings.TesseractPath, _settings.Theme) { Owner = this };
+        if (dlg.ShowDialog() != true) return;
+
+        _settings.TesseractPath = dlg.TesseractPath;
+        _settings.Theme = dlg.ThemeName;
+        _settings.Save();
+
+        Themes.ThemeManager.Apply(_settings.Theme);
+        PythonGenerator.TesseractPath = _settings.TesseractPath;
+        if (_activeDoc != null) UpdatePreview();
+    }
+
+    private bool HasValidTesseract => SettingsWindow.IsValid(_settings.TesseractPath);
+
     private void MenuExit_Click(object sender, RoutedEventArgs e) => Close();
     private void MenuAbout_Click(object sender, RoutedEventArgs e)
     {
@@ -452,6 +471,19 @@ public partial class MainWindow : Window
     // 条件・テキスト等の編集 → プレビュー更新 + Undo記録
     private void Field_LostFocus(object sender, RoutedEventArgs e) => Edited();
     private void Field_SelectionChanged(object sender, SelectionChangedEventArgs e) => Edited();
+
+    /// <summary>条件の種別変更。文字(OCR)はTesseract未設定だと選べない。</summary>
+    private void ConditionKind_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is ComboBox cb && cb.DataContext is Models.Condition c && c.Kind == 2 && !HasValidTesseract)
+        {
+            MessageBox.Show(this,
+                "文字認識(OCR)を使うには、メニューの「ファイル → 設定」で\nTesseract のパスを設定してください。",
+                "Tesseract 未設定", MessageBoxButton.OK, MessageBoxImage.Information);
+            c.Kind = 0;   // 変数に戻す(コンボもバインドで戻る)
+        }
+        Edited();
+    }
 
     // ============================================================
     //  テンプレ画像フィールド

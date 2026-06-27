@@ -14,6 +14,12 @@ public static class PythonGenerator
     private static readonly string[] CmpOps = { "==", "!=", "<", "<=", ">", ">=" };
     private static readonly string[] AssignOps = { "=", "+=", "-=", "*=", "/=" };
 
+    /// <summary>OCR で使う tesseract.exe のパス(設定から渡される)。</summary>
+    public static string? TesseractPath { get; set; }
+
+    /// <summary>条件が画像/OCR(カメラ必要)か。</summary>
+    private static bool NeedsCam(Condition c) => c.Kind is 1 or 2;
+
     private static string Num(double v) => v.ToString("0.###", CultureInfo.InvariantCulture);
 
     public static string ClassNameFromFile(string fileName)
@@ -34,11 +40,15 @@ public static class PythonGenerator
     public static string Generate(MacroDocument doc, string fileName)
     {
         var className = ClassNameFromFile(fileName);
-        bool requiresCam = AllBlocks(doc.Blocks).Any(b =>
+        var all = AllBlocks(doc.Blocks).ToList();
+        bool requiresCam = all.Any(b =>
             b is ScreenshotBlock
             || (b is NotifyBlock nb && nb.AttachScreenshot)
-            || (b is IfBlock ib && (ib.Condition.Kind == 1 || ib.ElseIfs.Any(br => br.Condition.Kind == 1)))
-            || (b is LoopBlock lb && lb.LoopKind == 2 && lb.Condition.Kind == 1));
+            || (b is IfBlock ib && (NeedsCam(ib.Condition) || ib.ElseIfs.Any(br => NeedsCam(br.Condition))))
+            || (b is LoopBlock lb && lb.LoopKind == 2 && NeedsCam(lb.Condition)));
+        bool hasOcr = all.Any(b =>
+            (b is IfBlock ib2 && (ib2.Condition.Kind == 2 || ib2.ElseIfs.Any(br => br.Condition.Kind == 2)))
+            || (b is LoopBlock lb2 && lb2.LoopKind == 2 && lb2.Condition.Kind == 2));
         string baseClass = requiresCam ? "ImageProcPythonCommand" : "PythonCommand";
 
         var sb = new StringBuilder();
@@ -103,6 +113,23 @@ public static class PythonGenerator
         {
             foreach (var (rel, code) in lines)
                 sb.AppendLine(baseIndent + new string(' ', 4 * rel) + code);
+        }
+
+        // OCR ヘルパー
+        if (hasOcr)
+        {
+            var path = (TesseractPath ?? "").Replace("\\", "\\\\").Replace("'", "\\'");
+            sb.AppendLine();
+            sb.AppendLine("    def _ocr(self, crop=None, lang='eng'):");
+            sb.AppendLine("        import pytesseract, cv2");
+            sb.AppendLine("        from PIL import Image");
+            sb.AppendLine($"        pytesseract.pytesseract.tesseract_cmd = r'{path}'");
+            sb.AppendLine("        img = self.camera.readFrame()");
+            sb.AppendLine("        if crop is not None:");
+            sb.AppendLine("            y1, y2, x1, x2 = crop");
+            sb.AppendLine("            img = img[y1:y2, x1:x2]");
+            sb.AppendLine("        rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)");
+            sb.AppendLine("        return pytesseract.image_to_string(Image.fromarray(rgb), lang=lang).strip()");
         }
 
         return sb.ToString();
@@ -247,6 +274,16 @@ public static class PythonGenerator
         {
             var th = c.Threshold is > 0 and <= 1 ? c.Threshold : 0.8;
             return $"self.isContainTemplate('{EscapeQuote(c.ImageRef)}', threshold={Num(th)})";
+        }
+        if (c.Kind == 2)
+        {
+            string crop = (c.OcrW > 0 && c.OcrH > 0)
+                ? $"[{c.OcrY}, {c.OcrY + c.OcrH}, {c.OcrX}, {c.OcrX + c.OcrW}]"
+                : "None";
+            string lang = c.OcrLang == 1 ? "eng" : "jpn";
+            string call = $"self._ocr({crop}, '{lang}')";
+            string text = $"'{EscapeQuote(c.OcrText)}'";
+            return c.OcrMode == 1 ? $"{text} in {call}" : $"{call} == {text}";
         }
         int op = c.Op is >= 0 and < 6 ? c.Op : 0;
         return $"self.{SanitizeVar(c.Var)} {CmpOps[op]} {ValueLiteral(c.Value)}";
