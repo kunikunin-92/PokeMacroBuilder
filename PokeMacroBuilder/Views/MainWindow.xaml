@@ -19,10 +19,9 @@
             <Setter Property="Margin" Value="0,0,0,5"/>
             <Setter Property="HorizontalContentAlignment" Value="Left"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="ToolTip" Value="クリックで末尾に追加 / ドラッグで好きな位置へ"/>
+            <Setter Property="ToolTip" Value="右のスクリプトへドラッグして配置"/>
             <EventSetter Event="PreviewMouseLeftButtonDown" Handler="PaletteBlock_Down"/>
             <EventSetter Event="PreviewMouseMove" Handler="PaletteBlock_Move"/>
-            <EventSetter Event="Click" Handler="PaletteBlock_Click"/>
         </Style>
 
         <!-- ===== タブ(編集中ファイル) ===== -->
@@ -695,20 +694,8 @@
                                  TextChanged="DisplayNameBox_TextChanged" LostFocus="Field_LostFocus"/>
                         <Button Content="&#x21B6;" Width="34" Height="30" Margin="0,0,4,0" Padding="0" FontSize="16"
                                 ToolTip="元に戻す (Ctrl+Z)" Click="Undo_Click"/>
-                        <Button Content="&#x21B7;" Width="34" Height="30" Margin="0,0,20,0" Padding="0" FontSize="16"
+                        <Button Content="&#x21B7;" Width="34" Height="30" Padding="0" FontSize="16"
                                 ToolTip="やり直し (Ctrl+Y)" Click="Redo_Click"/>
-                        <TextBlock Text="繰り返し:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                        <ComboBox x:Name="LoopBox" Width="130" Height="30" VerticalAlignment="Center"
-                                  SelectionChanged="LoopBox_SelectionChanged">
-                            <ComboBoxItem Content="なし (1回)"/>
-                            <ComboBoxItem Content="無限ループ"/>
-                            <ComboBoxItem Content="回数を指定"/>
-                        </ComboBox>
-                        <TextBox x:Name="LoopCountBox" Width="64" Height="30" Margin="6,0,0,0"
-                                 VerticalAlignment="Center" Text="10" Visibility="Collapsed"
-                                 LostFocus="NumberField_LostFocus"/>
-                        <TextBlock x:Name="LoopCountUnit" Text="回" VerticalAlignment="Center" Margin="4,0,0,0"
-                                   Visibility="Collapsed"/>
                     </StackPanel>
                 </Border>
 
@@ -751,12 +738,6 @@
                                 <StackPanel Orientation="Horizontal"><TextBlock Text="&#x1F4E2;" Margin="2,0,8,0"/><TextBlock Text="Discord通知" FontWeight="Bold" Foreground="White"/></StackPanel></Button>
                             <Button Style="{StaticResource PaletteBlockButton}" Tag="screenshot" Margin="0,0,0,10" Background="#FF12A89D" BorderBrush="#FF0C857C">
                                 <StackPanel Orientation="Horizontal"><TextBlock Text="&#x1F4F7;" Margin="2,0,8,0"/><TextBlock Text="スクショ保存" FontWeight="Bold" Foreground="White"/></StackPanel></Button>
-
-                            <Border Background="{StaticResource EditorBgBrush}" CornerRadius="3" Padding="10" Margin="0,2,0,0"
-                                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
-                                <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource TextDimBrush}"
-                                           Text="ブロックを右のスクリプトへドラッグして配置。青い線が入る位置に入ります。ループ/条件分岐の枠の中にも入れられます。既存ブロックもドラッグで移動できます。"/>
-                            </Border>
                         </StackPanel>
                         </ScrollViewer>
                     </Border>
@@ -808,6 +789,8 @@
                     <!-- ドラッグ中のゴースト(ラベルチップ)/挿入ライン用オーバーレイ -->
                     <Canvas x:Name="DragOverlay" Grid.Column="0" Grid.ColumnSpan="4"
                             IsHitTestVisible="False" Panel.ZIndex="100">
+                        <Border x:Name="InsertLine" Height="3" Width="100" CornerRadius="1.5"
+                                Background="{StaticResource AccentBrush}" Visibility="Collapsed"/>
                         <Border x:Name="GhostChip" Visibility="Collapsed" CornerRadius="4" Padding="10,5"
                                 Background="#F2007ACC" BorderBrush="White" BorderThickness="1">
                             <StackPanel Orientation="Horizontal">
@@ -815,8 +798,6 @@
                                 <TextBlock x:Name="GhostChipText" Foreground="White" FontWeight="SemiBold"/>
                             </StackPanel>
                         </Border>
-                        <Border x:Name="InsertLine" Height="3" Width="100" CornerRadius="1.5"
-                                Background="{StaticResource AccentBrush}" Visibility="Collapsed"/>
                     </Canvas>
                 </Grid>
             </Grid>

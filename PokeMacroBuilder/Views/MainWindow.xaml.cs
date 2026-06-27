@@ -37,7 +37,6 @@ public partial class MainWindow : Window
     private DragKind _dragKind;
     private bool _dragArmed;
     private bool _dragging;
-    private bool _paletteDragged;
     private Point _dragStart;
     private MacroBlock? _moveBlock;           // 既存ブロックの移動
     private Func<MacroBlock?>? _newFactory;    // パレットからの新規
@@ -94,13 +93,6 @@ public partial class MainWindow : Window
 
         _editorLoaded = false;
         DisplayNameBox.Text = doc.DisplayName;
-        LoopBox.SelectedIndex = doc.Loop switch
-        {
-            LoopMode.Infinite => 1,
-            LoopMode.Count => 2,
-            _ => 0
-        };
-        LoopCountBox.Text = doc.LoopCount.ToString(CultureInfo.InvariantCulture);
         BlocksHost.ItemsSource = doc.Blocks;
         SetBlocksSubscription(doc);
 
@@ -108,7 +100,6 @@ public partial class MainWindow : Window
         EditorPanel.Visibility = Visibility.Visible;
 
         _editorLoaded = true;
-        UpdateLoopCountVisibility();
         UpdateEditorHints();
         UpdatePreview();
         ResetUndo();
@@ -417,18 +408,6 @@ public partial class MainWindow : Window
         _ => null,
     };
 
-    private void PaletteBlock_Click(object sender, RoutedEventArgs e)
-    {
-        if (_paletteDragged) { _paletteDragged = false; return; } // ドラッグ後のClickは無視
-        if (_activeDoc is null) return;
-        if (sender is FrameworkElement fe && CreateByKind(fe.Tag as string) is { } nb)
-        {
-            _activeDoc.Blocks.Add(nb);
-            UpdateEditorHints();
-            Edited();
-        }
-    }
-
     // ---- 条件分岐: elif / else ----
     private void IfElseToggle_Click(object sender, RoutedEventArgs e)
     {
@@ -555,7 +534,6 @@ public partial class MainWindow : Window
     private void PaletteBlock_Down(object sender, MouseButtonEventArgs e)
     {
         _dragArmed = false;
-        _paletteDragged = false;
         if (_activeDoc is null || sender is not FrameworkElement fe) return;
         if (CreateByKind(fe.Tag as string) is null) return;
 
@@ -573,7 +551,6 @@ public partial class MainWindow : Window
         if (_dragging || !_dragArmed || _dragKind != DragKind.NewBlock) return;
         if (e.LeftButton != MouseButtonState.Pressed) return;
         if (!MovedEnough(e)) return;
-        _paletteDragged = true;
         BeginDrag(e);
         if (_dragging) DragUpdate(e);
     }
@@ -617,11 +594,13 @@ public partial class MainWindow : Window
 
     private void BeginDrag(MouseEventArgs e)
     {
-        // ドラッグ中ラベル(常にカーソルに追従する小さなチップ)
-        string label = _dragKind == DragKind.Move
-            ? (_moveBlock?.Kind ?? "ブロック")
-            : (CreateByKind(_paletteKind)?.Kind ?? "ブロック");
-        GhostChipText.Text = label;
+        // ドラッグ中ラベル(常にカーソルに追従する小さなチップ。色はブロックに合わせる)
+        var sample = _dragKind == DragKind.Move ? _moveBlock : CreateByKind(_paletteKind);
+        var (bg, fg) = ChipColors(sample);
+        GhostChip.Background = bg;
+        GhostChipText.Foreground = fg;
+        GhostChipIcon.Foreground = fg;
+        GhostChipText.Text = sample?.Kind ?? "ブロック";
         GhostChipIcon.Text = _dragKind == DragKind.NewBlock ? "➕" : "☰";
         GhostChip.Visibility = Visibility.Visible;
         InsertLine.Visibility = Visibility.Visible;
@@ -644,6 +623,27 @@ public partial class MainWindow : Window
         Canvas.SetTop(GhostChip, posOverlay.Y + 10);
         ComputeDropTarget(e.GetPosition(BlocksHost));
         AutoScroll(e);
+    }
+
+    private static (Brush bg, Brush fg) ChipColors(MacroBlock? b)
+    {
+        Brush Bg(string hex) => new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex)) { Opacity = 0.95 };
+        Brush White = Brushes.White;
+        Brush DarkBrown = new SolidColorBrush(Color.FromRgb(0x3B, 0x2A, 0x00));
+        Brush DarkCyan = new SolidColorBrush(Color.FromRgb(0x06, 0x38, 0x4B));
+        return b switch
+        {
+            PressBlock => (Bg("#4C97FF"), White),
+            StickBlock => (Bg("#9966FF"), White),
+            WaitBlock => (Bg("#FFAB19"), DarkBrown),
+            LoopBlock => (Bg("#E6A817"), DarkBrown),
+            IfBlock => (Bg("#E6A817"), DarkBrown),
+            VariableBlock => (Bg("#FF8C1A"), White),
+            LogBlock => (Bg("#5CB1D6"), DarkCyan),
+            NotifyBlock => (Bg("#CF63B4"), White),
+            ScreenshotBlock => (Bg("#12A89D"), White),
+            _ => (Bg("#007ACC"), White),
+        };
     }
 
     private void ComputeDropTarget(Point posRoot)
@@ -881,16 +881,8 @@ public partial class MainWindow : Window
         _activeDoc.LoopCount = parsed.LoopCount;
 
         DisplayNameBox.Text = parsed.DisplayName;
-        LoopBox.SelectedIndex = parsed.Loop switch
-        {
-            LoopMode.Infinite => 1,
-            LoopMode.Count => 2,
-            _ => 0
-        };
-        LoopCountBox.Text = parsed.LoopCount.ToString(CultureInfo.InvariantCulture);
 
         _editorLoaded = true;
-        UpdateLoopCountVisibility();
         UpdateEditorHints();
         UpdatePreview();
         _suppressSnapshot = false;
@@ -906,31 +898,10 @@ public partial class MainWindow : Window
         UpdatePreview();
     }
 
-    private void LoopBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (!_editorLoaded) return;
-        UpdateLoopCountVisibility();
-        Edited();
-    }
-
-    private void UpdateLoopCountVisibility()
-    {
-        bool isCount = LoopBox.SelectedIndex == 2;
-        LoopCountBox.Visibility = isCount ? Visibility.Visible : Visibility.Collapsed;
-        LoopCountUnit.Visibility = isCount ? Visibility.Visible : Visibility.Collapsed;
-    }
-
     private void SyncToDoc()
     {
         if (_activeDoc is null) return;
         _activeDoc.DisplayName = string.IsNullOrWhiteSpace(DisplayNameBox.Text) ? "新しいマクロ" : DisplayNameBox.Text.Trim();
-        _activeDoc.Loop = LoopBox.SelectedIndex switch
-        {
-            1 => LoopMode.Infinite,
-            2 => LoopMode.Count,
-            _ => LoopMode.None
-        };
-        _activeDoc.LoopCount = int.TryParse(LoopCountBox.Text, out var n) && n > 0 ? n : 1;
     }
 
     private void UpdatePreview()
