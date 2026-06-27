@@ -39,10 +39,10 @@ public partial class MainWindow : Window
     private bool _dragging;
     private bool _paletteDragged;
     private Point _dragStart;
-    private Point _grab;
     private MacroBlock? _moveBlock;           // 既存ブロックの移動
     private Func<MacroBlock?>? _newFactory;    // パレットからの新規
-    private FrameworkElement? _srcElement;     // ゴースト元
+    private string? _paletteKind;             // パレットからの種別(ラベル用)
+    private FrameworkElement? _srcElement;     // 移動元(ドラッグ判定用)
     private FrameworkElement? _dimmed;         // 移動中に薄くする元コンテナ
     private ObservableCollection<MacroBlock>? _dropColl;
     private int _dropIndex;
@@ -561,6 +561,7 @@ public partial class MainWindow : Window
 
         var kind = fe.Tag as string;
         _dragKind = DragKind.NewBlock;
+        _paletteKind = kind;
         _newFactory = () => CreateByKind(kind);
         _srcElement = fe;
         _dragStart = e.GetPosition(BlocksHost);
@@ -616,26 +617,21 @@ public partial class MainWindow : Window
 
     private void BeginDrag(MouseEventArgs e)
     {
-        if (_srcElement is null || _srcElement.ActualWidth < 1 || _srcElement.ActualHeight < 1)
-        {
-            _dragArmed = false;
-            return;
-        }
-        _grab = e.GetPosition(_srcElement);
-
-        var size = new Size(_srcElement.ActualWidth, _srcElement.ActualHeight);
-        var bmp = new RenderTargetBitmap(
-            (int)Math.Ceiling(size.Width), (int)Math.Ceiling(size.Height), 96, 96, PixelFormats.Pbgra32);
-        bmp.Render(_srcElement);
-        bmp.Freeze();
-
-        GhostImage.Source = bmp;
-        GhostImage.Width = size.Width;
-        GhostImage.Height = size.Height;
-        GhostImage.Visibility = Visibility.Visible;
+        // ドラッグ中ラベル(常にカーソルに追従する小さなチップ)
+        string label = _dragKind == DragKind.Move
+            ? (_moveBlock?.Kind ?? "ブロック")
+            : (CreateByKind(_paletteKind)?.Kind ?? "ブロック");
+        GhostChipText.Text = label;
+        GhostChipIcon.Text = _dragKind == DragKind.NewBlock ? "➕" : "☰";
+        GhostChip.Visibility = Visibility.Visible;
         InsertLine.Visibility = Visibility.Visible;
 
-        if (_dragKind == DragKind.Move) { _dimmed = _srcElement; _srcElement.Opacity = 0.35; }
+        // 移動元を薄く表示
+        if (_dragKind == DragKind.Move && _srcElement != null)
+        {
+            _dimmed = _srcElement;
+            _srcElement.Opacity = 0.4;
+        }
 
         _dragging = true;
         BlocksHost.CaptureMouse();
@@ -644,8 +640,8 @@ public partial class MainWindow : Window
     private void DragUpdate(MouseEventArgs e)
     {
         var posOverlay = e.GetPosition(DragOverlay);
-        Canvas.SetLeft(GhostImage, posOverlay.X - _grab.X);
-        Canvas.SetTop(GhostImage, posOverlay.Y - _grab.Y);
+        Canvas.SetLeft(GhostChip, posOverlay.X + 14);
+        Canvas.SetTop(GhostChip, posOverlay.Y + 10);
         ComputeDropTarget(e.GetPosition(BlocksHost));
         AutoScroll(e);
     }
@@ -725,8 +721,7 @@ public partial class MainWindow : Window
     private void EndDrag()
     {
         bool was = _dragging;
-        GhostImage.Visibility = Visibility.Collapsed;
-        GhostImage.Source = null;
+        GhostChip.Visibility = Visibility.Collapsed;
         InsertLine.Visibility = Visibility.Collapsed;
         if (_dimmed != null) { _dimmed.Opacity = 1.0; _dimmed = null; }
         if (BlocksHost.IsMouseCaptured) BlocksHost.ReleaseMouseCapture();
