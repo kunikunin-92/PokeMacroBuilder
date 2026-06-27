@@ -97,19 +97,19 @@
                             <TextBox Width="64" Height="28" Margin="6,0,3,0" LostFocus="NumberField_LostFocus"
                                      Text="{Binding Duration, StringFormat=0.###, UpdateSourceTrigger=LostFocus}"/>
                             <TextBlock Text="秒" Foreground="White" VerticalAlignment="Center" Margin="0,0,18,0"/>
-                            <TextBlock Text="後で待つ" Foreground="White" VerticalAlignment="Center"/>
+                            <TextBlock Text="待機" Foreground="White" VerticalAlignment="Center"/>
                             <TextBox Width="64" Height="28" Margin="6,0,3,0" LostFocus="NumberField_LostFocus"
                                      Text="{Binding Wait, StringFormat=0.###, UpdateSourceTrigger=LostFocus}"/>
                             <TextBlock Text="秒" Foreground="White" VerticalAlignment="Center" Margin="0,0,18,0"/>
                             <TextBlock Text="連打" Foreground="White" VerticalAlignment="Center"/>
                             <TextBox Width="48" Height="28" Margin="6,0,3,0" LostFocus="NumberField_LostFocus"
-                                     ToolTip="1なら1回、2以上で連打" Text="{Binding Repeat, UpdateSourceTrigger=LostFocus}"/>
+                                     ToolTip="1なら1回。2以上で連打になり、待機の値が押下間隔になります" Text="{Binding Repeat, UpdateSourceTrigger=LostFocus}"/>
                             <TextBlock Text="回" Foreground="White" VerticalAlignment="Center"/>
                         </StackPanel>
 
                         <!-- 押し続ける(hold) -->
                         <StackPanel x:Name="holdTiming" Orientation="Horizontal" Margin="0,10,0,0" Visibility="Collapsed">
-                            <TextBlock Text="後で待つ" Foreground="White" VerticalAlignment="Center"/>
+                            <TextBlock Text="待機" Foreground="White" VerticalAlignment="Center"/>
                             <TextBox Width="64" Height="28" Margin="6,0,3,0" LostFocus="NumberField_LostFocus"
                                      Text="{Binding Wait, StringFormat=0.###, UpdateSourceTrigger=LostFocus}"/>
                             <TextBlock Text="秒  (押したままにします。別ブロックで「離す」を)" Foreground="#DDFFFFFF" VerticalAlignment="Center"/>
@@ -213,7 +213,7 @@
                             <TextBox Width="64" Height="28" Margin="6,0,3,0" LostFocus="NumberField_LostFocus"
                                      Text="{Binding Duration, StringFormat=0.###, UpdateSourceTrigger=LostFocus}"/>
                             <TextBlock Text="秒" Foreground="White" VerticalAlignment="Center" Margin="0,0,18,0"/>
-                            <TextBlock Text="後で待つ" Foreground="White" VerticalAlignment="Center"/>
+                            <TextBlock Text="待機" Foreground="White" VerticalAlignment="Center"/>
                             <TextBox Width="64" Height="28" Margin="6,0,3,0" LostFocus="NumberField_LostFocus"
                                      Text="{Binding Wait, StringFormat=0.###, UpdateSourceTrigger=LostFocus}"/>
                             <TextBlock Text="秒" Foreground="White" VerticalAlignment="Center"/>
@@ -271,15 +271,15 @@
                         <TextBlock Text="変数" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" Margin="0,0,8,0"/>
                         <TextBox Width="90" Height="28" LostFocus="Field_LostFocus"
                                  Text="{Binding Name, UpdateSourceTrigger=LostFocus}"/>
-                        <ComboBox Width="108" Height="28" Margin="6,0,0,0" SelectedIndex="{Binding Op, Mode=TwoWay}"
+                        <ComboBox Width="64" Height="28" Margin="6,0,0,0" SelectedIndex="{Binding Op, Mode=TwoWay}"
                                   SelectionChanged="Field_SelectionChanged">
-                            <ComboBoxItem Content="= 代入"/>
-                            <ComboBoxItem Content="+= 加算"/>
-                            <ComboBoxItem Content="-= 減算"/>
-                            <ComboBoxItem Content="*= 乗算"/>
-                            <ComboBoxItem Content="/= 除算"/>
-                            <ComboBoxItem Content="++ (1増やす)"/>
-                            <ComboBoxItem Content="-- (1減らす)"/>
+                            <ComboBoxItem Content="="/>
+                            <ComboBoxItem Content="+="/>
+                            <ComboBoxItem Content="-="/>
+                            <ComboBoxItem Content="*="/>
+                            <ComboBoxItem Content="/="/>
+                            <ComboBoxItem Content="++"/>
+                            <ComboBoxItem Content="--"/>
                         </ComboBox>
                         <TextBox x:Name="varValue" Width="90" Height="28" Margin="6,0,0,0" LostFocus="Field_LostFocus"
                                  Text="{Binding Value, UpdateSourceTrigger=LostFocus}"/>
@@ -323,23 +323,29 @@
             </Border>
         </DataTemplate>
 
-        <!-- ===== 通知 ===== -->
+        <!-- ===== Discord通知 ===== -->
         <DataTemplate DataType="{x:Type models:NotifyBlock}">
             <Border Background="#FFCF63B4" CornerRadius="5" Margin="0,0,0,3">
                 <Grid Margin="12,10">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#x1F4E2;" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                        <TextBlock Text="通知" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                        <ComboBox Width="100" Height="28" SelectedIndex="{Binding Channel, Mode=TwoWay}"
-                                  SelectionChanged="Field_SelectionChanged">
-                            <ComboBoxItem Content="LINE"/>
-                            <ComboBoxItem Content="Discord"/>
-                        </ComboBox>
-                        <TextBox Width="240" Height="28" Margin="8,0,0,0" LostFocus="Field_LostFocus"
-                                 Text="{Binding Text, UpdateSourceTrigger=LostFocus}"/>
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#x1F4E2;" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Text="Discord通知" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <TextBlock Text="本文" Foreground="White" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBox Width="300" Height="28" LostFocus="Field_LostFocus"
+                                     ToolTip="{}{変数名} で変数値を埋め込めます (例: 現在 {cnt} 回目)"
+                                     Text="{Binding Text, UpdateSourceTrigger=LostFocus}"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <CheckBox Content="スクショを添付して送る" Foreground="White" VerticalAlignment="Center"
+                                      IsChecked="{Binding AttachScreenshot, Mode=TwoWay}" Click="Field_LostFocus"/>
+                            <TextBlock Text="（{ } で変数値を埋め込み）" Foreground="#DDFFFFFF" VerticalAlignment="Center" Margin="12,0,0,0" FontSize="11"/>
+                        </StackPanel>
                     </StackPanel>
                     <StackPanel Grid.Column="1" VerticalAlignment="Top">
                         <Button Content="&#x25B2;" Width="30" Height="26" Margin="0,0,0,3" Padding="0" ToolTip="上へ" Click="MoveUp_Click"/>
@@ -525,10 +531,8 @@
                 <MenuItem Header="新規マクロ(_N)" InputGestureText="Ctrl+N" Click="MenuNew_Click"/>
                 <MenuItem Header="ワークスペースを開く(_O)" InputGestureText="Ctrl+O" Click="MenuOpenWorkspace_Click"/>
                 <MenuItem x:Name="RecentMenu" Header="最近の項目(_R)"/>
-                <Separator/>
                 <MenuItem Header="上書き保存(_S)" InputGestureText="Ctrl+S" Click="MenuSave_Click"/>
                 <MenuItem Header="名前を付けて保存（コピー）(_C)" Click="MenuSaveAsCopy_Click"/>
-                <Separator/>
                 <MenuItem Header="終了(_X)" Click="MenuExit_Click"/>
             </MenuItem>
             <MenuItem Header="表示(_V)" Style="{StaticResource TopMenuItem}">
@@ -691,7 +695,7 @@
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="表示名:" VerticalAlignment="Center" Margin="0,0,6,0"/>
                         <TextBox x:Name="DisplayNameBox" Width="260" Height="30" VerticalAlignment="Center" Margin="0,0,20,0"
-                                 TextChanged="DisplayNameBox_TextChanged"/>
+                                 TextChanged="DisplayNameBox_TextChanged" LostFocus="Field_LostFocus"/>
                         <TextBlock Text="繰り返し:" VerticalAlignment="Center" Margin="0,0,6,0"/>
                         <ComboBox x:Name="LoopBox" Width="130" Height="30" VerticalAlignment="Center"
                                   SelectionChanged="LoopBox_SelectionChanged">
@@ -725,17 +729,17 @@
 
                             <TextBlock Text="入力" Foreground="{StaticResource TextDimBrush}" FontSize="11" Margin="2,0,0,4"/>
                             <Button Style="{StaticResource PaletteBlockButton}" Tag="press" Background="#FF4C97FF" BorderBrush="#FF3B7DDB">
-                                <StackPanel Orientation="Horizontal"><TextBlock Text="&#x1F3AE;" Margin="2,0,8,0"/><TextBlock Text="ボタンを押す" FontWeight="Bold" Foreground="White"/></StackPanel></Button>
+                                <StackPanel Orientation="Horizontal"><TextBlock Text="&#x1F3AE;" Margin="2,0,8,0"/><TextBlock Text="ボタン" FontWeight="Bold" Foreground="White"/></StackPanel></Button>
                             <Button Style="{StaticResource PaletteBlockButton}" Tag="stick" Background="#FF9966FF" BorderBrush="#FF7A4DDB">
-                                <StackPanel Orientation="Horizontal"><TextBlock Text="&#x1F579;" Margin="2,0,8,0"/><TextBlock Text="スティック / 方向" FontWeight="Bold" Foreground="White"/></StackPanel></Button>
+                                <StackPanel Orientation="Horizontal"><TextBlock Text="&#x1F579;" Margin="2,0,8,0"/><TextBlock Text="スティック" FontWeight="Bold" Foreground="White"/></StackPanel></Button>
                             <Button Style="{StaticResource PaletteBlockButton}" Tag="wait" Margin="0,0,0,10" Background="#FFFFAB19" BorderBrush="#FFD98E0F">
-                                <StackPanel Orientation="Horizontal"><TextBlock Text="&#x23F1;" Margin="2,0,8,0"/><TextBlock Text="待機する" FontWeight="Bold" Foreground="#FF3B2A00"/></StackPanel></Button>
+                                <StackPanel Orientation="Horizontal"><TextBlock Text="&#x23F1;" Margin="2,0,8,0"/><TextBlock Text="待機" FontWeight="Bold" Foreground="#FF3B2A00"/></StackPanel></Button>
 
                             <TextBlock Text="制御フロー" Foreground="{StaticResource TextDimBrush}" FontSize="11" Margin="2,0,0,4"/>
                             <Button Style="{StaticResource PaletteBlockButton}" Tag="if" Background="#FFE6A817" BorderBrush="#FFC78F0E">
-                                <StackPanel Orientation="Horizontal"><TextBlock Text="&#x2753;" Margin="2,0,8,0"/><TextBlock Text="条件分岐 (if)" FontWeight="Bold" Foreground="#FF3B2A00"/></StackPanel></Button>
+                                <StackPanel Orientation="Horizontal"><TextBlock Text="&#x2753;" Margin="2,0,8,0"/><TextBlock Text="条件分岐" FontWeight="Bold" Foreground="#FF3B2A00"/></StackPanel></Button>
                             <Button Style="{StaticResource PaletteBlockButton}" Tag="loop" Margin="0,0,0,10" Background="#FFE6A817" BorderBrush="#FFC78F0E">
-                                <StackPanel Orientation="Horizontal"><TextBlock Text="&#x1F501;" Margin="2,0,8,0"/><TextBlock Text="ループ (ずっと/回数/条件)" FontWeight="Bold" Foreground="#FF3B2A00"/></StackPanel></Button>
+                                <StackPanel Orientation="Horizontal"><TextBlock Text="&#x1F501;" Margin="2,0,8,0"/><TextBlock Text="ループ" FontWeight="Bold" Foreground="#FF3B2A00"/></StackPanel></Button>
 
                             <TextBlock Text="データ・通知" Foreground="{StaticResource TextDimBrush}" FontSize="11" Margin="2,0,0,4"/>
                             <Button Style="{StaticResource PaletteBlockButton}" Tag="var" Background="#FFFF8C1A" BorderBrush="#FFD9750E">
@@ -743,7 +747,7 @@
                             <Button Style="{StaticResource PaletteBlockButton}" Tag="log" Background="#FF5CB1D6" BorderBrush="#FF3E93B8">
                                 <StackPanel Orientation="Horizontal"><TextBlock Text="&#x1F4DD;" Margin="2,0,8,0"/><TextBlock Text="ログ出力" FontWeight="Bold" Foreground="#FF06384B"/></StackPanel></Button>
                             <Button Style="{StaticResource PaletteBlockButton}" Tag="notify" Background="#FFCF63B4" BorderBrush="#FFAE4895">
-                                <StackPanel Orientation="Horizontal"><TextBlock Text="&#x1F4E2;" Margin="2,0,8,0"/><TextBlock Text="通知 (LINE/Discord)" FontWeight="Bold" Foreground="White"/></StackPanel></Button>
+                                <StackPanel Orientation="Horizontal"><TextBlock Text="&#x1F4E2;" Margin="2,0,8,0"/><TextBlock Text="Discord通知" FontWeight="Bold" Foreground="White"/></StackPanel></Button>
                             <Button Style="{StaticResource PaletteBlockButton}" Tag="screenshot" Margin="0,0,0,10" Background="#FF12A89D" BorderBrush="#FF0C857C">
                                 <StackPanel Orientation="Horizontal"><TextBlock Text="&#x1F4F7;" Margin="2,0,8,0"/><TextBlock Text="スクショ保存" FontWeight="Bold" Foreground="White"/></StackPanel></Button>
 
@@ -799,6 +803,14 @@
                             </Border>
                         </Grid>
                     </Border>
+
+                    <!-- ドラッグ中のゴースト/挿入ライン用オーバーレイ -->
+                    <Canvas x:Name="DragOverlay" Grid.Column="0" Grid.ColumnSpan="4"
+                            IsHitTestVisible="False" Panel.ZIndex="100">
+                        <Image x:Name="GhostImage" Opacity="0.8" Visibility="Collapsed"/>
+                        <Border x:Name="InsertLine" Height="3" Width="100" CornerRadius="1.5"
+                                Background="{StaticResource AccentBrush}" Visibility="Collapsed"/>
+                    </Canvas>
                 </Grid>
             </Grid>
         </Grid>

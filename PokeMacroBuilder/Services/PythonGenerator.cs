@@ -34,7 +34,8 @@ public static class PythonGenerator
     public static string Generate(MacroDocument doc, string fileName)
     {
         var className = ClassNameFromFile(fileName);
-        bool requiresCam = AllBlocks(doc.Blocks).Any(b => b is ScreenshotBlock);
+        bool requiresCam = AllBlocks(doc.Blocks).Any(b =>
+            b is ScreenshotBlock || (b is NotifyBlock nb && nb.AttachScreenshot));
         string baseClass = requiresCam ? "ImageProcPythonCommand" : "PythonCommand";
 
         var sb = new StringBuilder();
@@ -127,9 +128,7 @@ public static class PythonGenerator
                     outp.Add((rel, $"print('{EscapeQuote(l.Text)}')"));
                     break;
                 case NotifyBlock no:
-                    outp.Add((rel, no.Channel == 1
-                        ? $"self.discord_text('{EscapeQuote(no.Text)}')"
-                        : $"self.LINE_text('{EscapeQuote(no.Text)}')"));
+                    outp.Add((rel, EmitNotify(no)));
                     break;
                 case ScreenshotBlock sc:
                     outp.Add((rel, string.IsNullOrWhiteSpace(sc.Name)
@@ -218,6 +217,27 @@ public static class PythonGenerator
         return $"self.press({target}, duration={Num(s.Duration)}, wait={Num(s.Wait)})";
     }
 
+    private static readonly System.Text.RegularExpressions.Regex Placeholder =
+        new(@"\{([A-Za-z_][A-Za-z0-9_]*)\}");
+
+    /// <summary>本文中の {name} を {self.name} に変換し、必要なら f文字列にする。</summary>
+    private static string MessageLiteral(string text)
+    {
+        text ??= "";
+        bool hasVar = Placeholder.IsMatch(text);
+        var body = Placeholder.Replace(text, m => "{self." + SanitizeVar(m.Groups[1].Value) + "}");
+        body = body.Replace("\\", "\\\\").Replace("'", "\\'");
+        return hasVar ? $"f'{body}'" : $"'{body}'";
+    }
+
+    private static string EmitNotify(NotifyBlock n)
+    {
+        var content = MessageLiteral(n.Text);
+        return n.AttachScreenshot
+            ? $"self.discord_image(content={content})"
+            : $"self.discord_text({content})";
+    }
+
     private static string Cond(Condition c)
     {
         int op = c.Op is >= 0 and < 6 ? c.Op : 0;
@@ -259,6 +279,10 @@ public static class PythonGenerator
                 case IfBlock i:
                     Add(SanitizeVar(i.Condition.Var));
                     foreach (var br in i.ElseIfs) Add(SanitizeVar(br.Condition.Var));
+                    break;
+                case NotifyBlock n:
+                    foreach (System.Text.RegularExpressions.Match m in Placeholder.Matches(n.Text ?? ""))
+                        Add(SanitizeVar(m.Groups[1].Value));
                     break;
             }
         }

@@ -44,11 +44,13 @@ public partial class MainWindow : Window
     private Func<MacroBlock?>? _newFactory;    // パレットからの新規
     private FrameworkElement? _srcElement;     // ゴースト元
     private FrameworkElement? _dimmed;         // 移動中に薄くする元コンテナ
-    private DragGhostAdorner? _ghost;
-    private InsertionAdorner? _insAdorner;
-    private AdornerLayer? _adornerLayer;
     private ObservableCollection<MacroBlock>? _dropColl;
     private int _dropIndex;
+
+    // Undo / Redo (スナップショット方式)
+    private readonly List<string> _undo = new();
+    private readonly List<string> _redo = new();
+    private bool _suppressSnapshot;
 
     public MainWindow()
     {
@@ -109,6 +111,7 @@ public partial class MainWindow : Window
         UpdateLoopCountVisibility();
         UpdateEditorHints();
         UpdatePreview();
+        ResetUndo();
     }
 
     /// <summary>ドキュメントをタブとして開く(同一ファイルが既にあれば再利用)。</summary>
@@ -276,11 +279,15 @@ public partial class MainWindow : Window
         base.OnPreviewKeyDown(e);
         if ((Keyboard.Modifiers & ModifierKeys.Control) != 0)
         {
+            // テキスト編集中は TextBox 自身の Undo/Redo を優先
+            bool inText = Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase;
             switch (e.Key)
             {
                 case Key.S when _activeDoc != null: Save_Click(this, new RoutedEventArgs()); e.Handled = true; break;
                 case Key.N: New_Click(this, new RoutedEventArgs()); e.Handled = true; break;
                 case Key.O: ChooseWorkspace_Click(this, new RoutedEventArgs()); e.Handled = true; break;
+                case Key.Z when _activeDoc != null && !inText: Undo(); e.Handled = true; break;
+                case Key.Y when _activeDoc != null && !inText: Redo(); e.Handled = true; break;
             }
         }
     }
@@ -418,7 +425,7 @@ public partial class MainWindow : Window
         {
             _activeDoc.Blocks.Add(nb);
             UpdateEditorHints();
-            UpdatePreview();
+            Edited();
         }
     }
 
@@ -428,7 +435,7 @@ public partial class MainWindow : Window
         if (((FrameworkElement)sender).DataContext is IfBlock ib)
         {
             ib.HasElse = !ib.HasElse;
-            UpdatePreview();
+            Edited();
         }
     }
 
@@ -437,7 +444,7 @@ public partial class MainWindow : Window
         if (((FrameworkElement)sender).DataContext is IfBlock ib)
         {
             ib.AddElseIf();
-            UpdatePreview();
+            Edited();
         }
     }
 
@@ -446,12 +453,12 @@ public partial class MainWindow : Window
         if (_activeDoc is null || ((FrameworkElement)sender).DataContext is not ElseIfBranch br) return;
         foreach (var b in PythonGenerator.AllBlocks(_activeDoc.Blocks))
             if (b is IfBlock ib && ib.ElseIfs.Contains(br)) { ib.RemoveElseIf(br); break; }
-        UpdatePreview();
+        Edited();
     }
 
-    // 条件・テキスト等の編集 → プレビュー更新
-    private void Field_LostFocus(object sender, RoutedEventArgs e) => UpdatePreview();
-    private void Field_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdatePreview();
+    // 条件・テキスト等の編集 → プレビュー更新 + Undo記録
+    private void Field_LostFocus(object sender, RoutedEventArgs e) => Edited();
+    private void Field_SelectionChanged(object sender, SelectionChangedEventArgs e) => Edited();
 
     private void PadButton_Click(object sender, RoutedEventArgs e)
     {
@@ -459,19 +466,19 @@ public partial class MainWindow : Window
             fe.Tag is string t && int.TryParse(t, out var idx))
         {
             sb.Direction = idx;
-            UpdatePreview();
+            Edited();
         }
     }
 
-    private void StickField_Changed(object sender, SelectionChangedEventArgs e) => UpdatePreview();
-    private void NumberField_LostFocus(object sender, RoutedEventArgs e) => UpdatePreview();
+    private void StickField_Changed(object sender, SelectionChangedEventArgs e) => Edited();
+    private void NumberField_LostFocus(object sender, RoutedEventArgs e) => Edited();
 
     private void AddKeySlot_Click(object sender, RoutedEventArgs e)
     {
         if (((FrameworkElement)sender).DataContext is PressBlock p)
         {
             p.AddKey();
-            UpdatePreview();
+            Edited();
         }
     }
 
@@ -486,7 +493,7 @@ public partial class MainWindow : Window
                 break;
             }
         }
-        UpdatePreview();
+        Edited();
     }
 
     private void MoveUp_Click(object sender, RoutedEventArgs e)
@@ -494,7 +501,7 @@ public partial class MainWindow : Window
         if (_activeDoc is null || ((FrameworkElement)sender).DataContext is not MacroBlock b) return;
         var coll = FindParentCollection(b);
         int i = coll?.IndexOf(b) ?? -1;
-        if (coll != null && i > 0) { coll.Move(i, i - 1); UpdatePreview(); }
+        if (coll != null && i > 0) { coll.Move(i, i - 1); Edited(); }
     }
 
     private void MoveDown_Click(object sender, RoutedEventArgs e)
@@ -502,7 +509,7 @@ public partial class MainWindow : Window
         if (_activeDoc is null || ((FrameworkElement)sender).DataContext is not MacroBlock b) return;
         var coll = FindParentCollection(b);
         int i = coll?.IndexOf(b) ?? -1;
-        if (coll != null && i >= 0 && i < coll.Count - 1) { coll.Move(i, i + 1); UpdatePreview(); }
+        if (coll != null && i >= 0 && i < coll.Count - 1) { coll.Move(i, i + 1); Edited(); }
     }
 
     private void DeleteBlock_Click(object sender, RoutedEventArgs e)
@@ -510,7 +517,7 @@ public partial class MainWindow : Window
         if (_activeDoc is null || ((FrameworkElement)sender).DataContext is not MacroBlock b) return;
         FindParentCollection(b)?.Remove(b);
         UpdateEditorHints();
-        UpdatePreview();
+        Edited();
     }
 
     /// <summary>ブロックの親コレクション(ルート/コンテナのChildren/Else/elif)を返す。</summary>
@@ -622,13 +629,11 @@ public partial class MainWindow : Window
         bmp.Render(_srcElement);
         bmp.Freeze();
 
-        _adornerLayer = AdornerLayer.GetAdornerLayer(BlocksHost);
-        if (_adornerLayer is null) { _dragArmed = false; return; }
-
-        _ghost = new DragGhostAdorner(BlocksHost, bmp, size);
-        _adornerLayer.Add(_ghost);
-        _insAdorner = new InsertionAdorner(BlocksHost);
-        _adornerLayer.Add(_insAdorner);
+        GhostImage.Source = bmp;
+        GhostImage.Width = size.Width;
+        GhostImage.Height = size.Height;
+        GhostImage.Visibility = Visibility.Visible;
+        InsertLine.Visibility = Visibility.Visible;
 
         if (_dragKind == DragKind.Move) { _dimmed = _srcElement; _srcElement.Opacity = 0.35; }
 
@@ -638,9 +643,10 @@ public partial class MainWindow : Window
 
     private void DragUpdate(MouseEventArgs e)
     {
-        var posRoot = e.GetPosition(BlocksHost);
-        _ghost?.UpdatePosition(new Point(posRoot.X - _grab.X, posRoot.Y - _grab.Y));
-        ComputeDropTarget(posRoot);
+        var posOverlay = e.GetPosition(DragOverlay);
+        Canvas.SetLeft(GhostImage, posOverlay.X - _grab.X);
+        Canvas.SetTop(GhostImage, posOverlay.Y - _grab.Y);
+        ComputeDropTarget(e.GetPosition(BlocksHost));
         AutoScroll(e);
     }
 
@@ -672,9 +678,13 @@ public partial class MainWindow : Window
 
         _dropColl = coll;
         _dropIndex = index;
-        double x1 = htl.X + 4;
-        double x2 = htl.X + Math.Max(40, hostIc.ActualWidth) - 4;
-        _insAdorner?.Update(x1, x2, y.Value);
+
+        // BlocksHost 座標 → オーバーレイ座標へ変換してライン表示
+        var p1 = BlocksHost.TranslatePoint(new Point(htl.X + 4, y.Value), DragOverlay);
+        double width = Math.Max(40, hostIc.ActualWidth) - 8;
+        Canvas.SetLeft(InsertLine, p1.X);
+        Canvas.SetTop(InsertLine, p1.Y - 1.5);
+        InsertLine.Width = width;
     }
 
     private void PerformDrop()
@@ -715,12 +725,9 @@ public partial class MainWindow : Window
     private void EndDrag()
     {
         bool was = _dragging;
-        if (_adornerLayer != null)
-        {
-            if (_ghost != null) _adornerLayer.Remove(_ghost);
-            if (_insAdorner != null) _adornerLayer.Remove(_insAdorner);
-        }
-        _ghost = null; _insAdorner = null; _adornerLayer = null;
+        GhostImage.Visibility = Visibility.Collapsed;
+        GhostImage.Source = null;
+        InsertLine.Visibility = Visibility.Collapsed;
         if (_dimmed != null) { _dimmed.Opacity = 1.0; _dimmed = null; }
         if (BlocksHost.IsMouseCaptured) BlocksHost.ReleaseMouseCapture();
 
@@ -732,7 +739,7 @@ public partial class MainWindow : Window
         _srcElement = null;
         _dropColl = null;
 
-        if (was) UpdatePreview();
+        if (was) { UpdatePreview(); RecordSnapshot(); }
     }
 
     // ---- ヘルパ ----
@@ -818,6 +825,80 @@ public partial class MainWindow : Window
     }
 
     // ============================================================
+    //  Undo / Redo
+    // ============================================================
+    private void ResetUndo()
+    {
+        _undo.Clear();
+        _redo.Clear();
+        if (_activeDoc != null) _undo.Add(MacroSerializer.ToBase64(_activeDoc));
+    }
+
+    /// <summary>変更後に呼ぶ。現在状態をスナップショットとして積む。</summary>
+    private void RecordSnapshot()
+    {
+        if (_suppressSnapshot || _activeDoc is null) return;
+        SyncToDoc();
+        var s = MacroSerializer.ToBase64(_activeDoc);
+        if (_undo.Count > 0 && _undo[^1] == s) return;
+        _undo.Add(s);
+        if (_undo.Count > 100) _undo.RemoveAt(0);
+        _redo.Clear();
+    }
+
+    private void Undo()
+    {
+        if (_activeDoc is null || _undo.Count < 2) return;
+        SyncToDoc();
+        var cur = MacroSerializer.ToBase64(_activeDoc);
+        if (_undo[^1] != cur) _undo.Add(cur);   // 未記録の変更があれば確定
+        var top = _undo[^1];
+        _undo.RemoveAt(_undo.Count - 1);
+        _redo.Add(top);
+        ApplySnapshot(_undo[^1]);
+    }
+
+    private void Redo()
+    {
+        if (_activeDoc is null || _redo.Count == 0) return;
+        var s = _redo[^1];
+        _redo.RemoveAt(_redo.Count - 1);
+        _undo.Add(s);
+        ApplySnapshot(s);
+    }
+
+    private void ApplySnapshot(string base64)
+    {
+        if (_activeDoc is null) return;
+        var parsed = MacroSerializer.TryParse(MacroSerializer.Marker + base64);
+        if (parsed is null) return;
+
+        _suppressSnapshot = true;
+        _editorLoaded = false;
+
+        _activeDoc.Blocks.Clear();
+        foreach (var b in parsed.Blocks) _activeDoc.Blocks.Add(b);
+        _activeDoc.DisplayName = parsed.DisplayName;
+        _activeDoc.Loop = parsed.Loop;
+        _activeDoc.LoopCount = parsed.LoopCount;
+
+        DisplayNameBox.Text = parsed.DisplayName;
+        LoopBox.SelectedIndex = parsed.Loop switch
+        {
+            LoopMode.Infinite => 1,
+            LoopMode.Count => 2,
+            _ => 0
+        };
+        LoopCountBox.Text = parsed.LoopCount.ToString(CultureInfo.InvariantCulture);
+
+        _editorLoaded = true;
+        UpdateLoopCountVisibility();
+        UpdateEditorHints();
+        UpdatePreview();
+        _suppressSnapshot = false;
+    }
+
+    // ============================================================
     //  表示名 / ループ / 保存 / プレビュー
     // ============================================================
     private void DisplayNameBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -831,7 +912,7 @@ public partial class MainWindow : Window
     {
         if (!_editorLoaded) return;
         UpdateLoopCountVisibility();
-        UpdatePreview();
+        Edited();
     }
 
     private void UpdateLoopCountVisibility()
@@ -861,6 +942,9 @@ public partial class MainWindow : Window
         var code = PythonGenerator.Generate(_activeDoc, _activeDoc.FileName ?? "macro1.py");
         PreviewBox.Document = PythonHighlighter.BuildDocument(code);
     }
+
+    /// <summary>編集後の共通処理: プレビュー更新 + Undo スナップショット。</summary>
+    private void Edited() { UpdatePreview(); RecordSnapshot(); }
 
     private void Save_Click(object sender, RoutedEventArgs e)
     {

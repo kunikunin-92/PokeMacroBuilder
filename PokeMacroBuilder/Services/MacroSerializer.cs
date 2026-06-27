@@ -47,6 +47,7 @@ internal sealed class BlockDto
     public int VarOp { get; set; }
     public string VarValue { get; set; } = "0";
     public int Channel { get; set; }
+    public bool AttachScreenshot { get; set; }
     public string Text { get; set; } = "";
     public string Name { get; set; } = "";
 }
@@ -167,7 +168,7 @@ public static class MacroSerializer
             case LogBlock l:
                 return new BlockDto { Kind = "log", Text = l.Text };
             case NotifyBlock n:
-                return new BlockDto { Kind = "notify", Channel = n.Channel, Text = n.Text };
+                return new BlockDto { Kind = "notify", AttachScreenshot = n.AttachScreenshot, Text = n.Text };
             case ScreenshotBlock sc:
                 return new BlockDto { Kind = "screenshot", Name = sc.Name };
             default:
@@ -242,7 +243,7 @@ public static class MacroSerializer
             case "log":
                 return new LogBlock { Text = b.Text };
             case "notify":
-                return new NotifyBlock { Channel = b.Channel == 1 ? 1 : 0, Text = b.Text };
+                return new NotifyBlock { AttachScreenshot = b.AttachScreenshot, Text = b.Text };
             case "screenshot":
                 return new ScreenshotBlock { Name = b.Name };
             default:

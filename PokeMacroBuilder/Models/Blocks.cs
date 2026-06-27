@@ -80,7 +80,7 @@ public sealed class KeySlot : INotifyPropertyChanged
 /// </summary>
 public sealed class PressBlock : MacroBlock
 {
-    public override string Kind => "ボタンを押す";
+    public override string Kind => "ボタン";
 
     /// <summary>0:押す 1:押し続ける(hold) 2:離す(holdEnd)</summary>
     private int _mode;
@@ -105,7 +105,7 @@ public sealed class PressBlock : MacroBlock
 /// <summary>スティック / 方向キーを倒す(8方向)。</summary>
 public sealed class StickBlock : MacroBlock
 {
-    public override string Kind => "スティック / 方向";
+    public override string Kind => "スティック";
 
     private int _device = 1;     // 0=Hat,1=L,2=R
     public int Device { get => _device; set => Set(ref _device, value); }
@@ -126,7 +126,7 @@ public sealed class StickBlock : MacroBlock
 /// <summary>指定秒数だけ待機する。</summary>
 public sealed class WaitBlock : MacroBlock
 {
-    public override string Kind => "待機する";
+    public override string Kind => "待機";
 
     private double _seconds = 1.0;
     public double Seconds { get => _seconds; set => Set(ref _seconds, value); }
@@ -196,16 +196,17 @@ public sealed class LogBlock : MacroBlock
     public string Text { get => _text; set => Set(ref _text, value); }
 }
 
+/// <summary>Discord 通知。本文に {変数名} を埋め込め、スクショ添付も可能。</summary>
 public sealed class NotifyBlock : MacroBlock
 {
-    public override string Kind => "通知";
+    public override string Kind => "Discord通知";
 
-    /// <summary>0:LINE 1:Discord</summary>
-    private int _channel;
-    public int Channel { get => _channel; set => Set(ref _channel, value); }
-
-    private string _text = "通知メッセージ";
+    private string _text = "メッセージ {cnt}";
     public string Text { get => _text; set => Set(ref _text, value); }
+
+    /// <summary>true ならスクショを添付して送る(ImageProcPythonCommand が必要)。</summary>
+    private bool _attachScreenshot;
+    public bool AttachScreenshot { get => _attachScreenshot; set => Set(ref _attachScreenshot, value); }
 }
 
 /// <summary>画面をキャプチャして保存する(ImageProcPythonCommand が必要)。</summary>
