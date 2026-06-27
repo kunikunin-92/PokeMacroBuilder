@@ -43,6 +43,10 @@ public sealed class Condition : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
     private void On([CallerMemberName] string? n = null) => PropertyChanged?.Invoke(this, new(n));
 
+    /// <summary>0:変数の比較 1:画像認識(テンプレ一致)</summary>
+    private int _kind;
+    public int Kind { get => _kind; set { if (_kind != value) { _kind = value; On(); } } }
+
     private string _var = "cnt";
     public string Var { get => _var; set { if (_var != value) { _var = value; On(); } } }
 
@@ -52,6 +56,15 @@ public sealed class Condition : INotifyPropertyChanged
 
     private string _value = "0";
     public string Value { get => _value; set { if (_value != value) { _value = value; On(); } } }
+
+    // --- 画像認識用 ---
+    /// <summary>テンプレ画像の相対参照 (例: macro1/img1.png)。</summary>
+    private string _imageRef = "";
+    public string ImageRef { get => _imageRef; set { if (_imageRef != value) { _imageRef = value; On(); } } }
+
+    /// <summary>一致率(0.0〜1.0)。</summary>
+    private double _threshold = 0.8;
+    public double Threshold { get => _threshold; set { if (_threshold != value) { _threshold = value; On(); } } }
 }
 
 // ============================================================

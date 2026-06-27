@@ -24,6 +24,47 @@
             <EventSetter Event="PreviewMouseMove" Handler="PaletteBlock_Move"/>
         </Style>
 
+        <!-- ===== 条件エディタ(変数比較 / 画像認識) ===== -->
+        <DataTemplate DataType="{x:Type models:Condition}">
+            <StackPanel Orientation="Horizontal">
+                <ComboBox Width="72" Height="28" SelectedIndex="{Binding Kind, Mode=TwoWay}"
+                          SelectionChanged="Field_SelectionChanged">
+                    <ComboBoxItem Content="変数"/>
+                    <ComboBoxItem Content="画像"/>
+                </ComboBox>
+
+                <!-- 変数比較 -->
+                <StackPanel x:Name="condVar" Orientation="Horizontal" Margin="6,0,0,0">
+                    <TextBox Width="78" Height="28" LostFocus="Field_LostFocus"
+                             Text="{Binding Var, UpdateSourceTrigger=LostFocus}"/>
+                    <ComboBox Width="56" Height="28" Margin="4,0" SelectedIndex="{Binding Op, Mode=TwoWay}"
+                              SelectionChanged="Field_SelectionChanged">
+                        <ComboBoxItem Content="="/><ComboBoxItem Content="&#x2260;"/><ComboBoxItem Content="&lt;"/>
+                        <ComboBoxItem Content="&#x2264;"/><ComboBoxItem Content="&gt;"/><ComboBoxItem Content="&#x2265;"/>
+                    </ComboBox>
+                    <TextBox Width="78" Height="28" LostFocus="Field_LostFocus"
+                             Text="{Binding Value, UpdateSourceTrigger=LostFocus}"/>
+                </StackPanel>
+
+                <!-- 画像認識 -->
+                <StackPanel x:Name="condImg" Orientation="Horizontal" Margin="6,0,0,0" Visibility="Collapsed">
+                    <TextBlock Text="画像" Foreground="#FF3B2A00" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                    <ComboBox Width="150" Height="28" SelectedItem="{Binding ImageRef, Mode=TwoWay}"
+                              SelectionChanged="Field_SelectionChanged"
+                              ItemsSource="{Binding TemplateImageRefs, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                    <TextBlock Text="一致率" Foreground="#FF3B2A00" VerticalAlignment="Center" Margin="8,0,4,0"/>
+                    <TextBox Width="52" Height="28" LostFocus="Field_LostFocus"
+                             ToolTip="0〜1 (例: 0.8)" Text="{Binding Threshold, StringFormat=0.##, UpdateSourceTrigger=LostFocus}"/>
+                </StackPanel>
+            </StackPanel>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Kind}" Value="1">
+                    <Setter TargetName="condVar" Property="Visibility" Value="Collapsed"/>
+                    <Setter TargetName="condImg" Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
         <!-- ===== タブ(編集中ファイル) ===== -->
         <DataTemplate x:Key="TabTemplate">
             <Border x:Name="tabBd" Background="{StaticResource ShellBgBrush}" Cursor="Hand"
@@ -397,15 +438,7 @@
                                 <TextBlock Text="回" Foreground="#FF3B2A00" VerticalAlignment="Center" FontWeight="Bold"/>
                             </StackPanel>
                             <StackPanel x:Name="condPanel" Orientation="Horizontal" Margin="8,0,0,0" Visibility="Collapsed">
-                                <TextBox Width="80" Height="28" LostFocus="Field_LostFocus"
-                                         Text="{Binding Condition.Var, UpdateSourceTrigger=LostFocus}"/>
-                                <ComboBox Width="58" Height="28" Margin="4,0" SelectedIndex="{Binding Condition.Op, Mode=TwoWay}"
-                                          SelectionChanged="Field_SelectionChanged">
-                                    <ComboBoxItem Content="="/><ComboBoxItem Content="&#x2260;"/><ComboBoxItem Content="&lt;"/>
-                                    <ComboBoxItem Content="&#x2264;"/><ComboBoxItem Content="&gt;"/><ComboBoxItem Content="&#x2265;"/>
-                                </ComboBox>
-                                <TextBox Width="80" Height="28" LostFocus="Field_LostFocus"
-                                         Text="{Binding Condition.Value, UpdateSourceTrigger=LostFocus}"/>
+                                <ContentControl Content="{Binding Condition}" VerticalAlignment="Center"/>
                             </StackPanel>
                         </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal">
@@ -440,15 +473,7 @@
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#x2630;" FontSize="12" Foreground="#80000000" VerticalAlignment="Center" Margin="0,0,8,0" ToolTip="ここをドラッグして移動" Cursor="SizeAll"/><TextBlock Text="&#x2753;" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
                             <TextBlock Text="条件分岐  もし" FontWeight="Bold" Foreground="#FF3B2A00" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <TextBox Width="78" Height="28" LostFocus="Field_LostFocus"
-                                     Text="{Binding Condition.Var, UpdateSourceTrigger=LostFocus}"/>
-                            <ComboBox Width="56" Height="28" Margin="4,0" SelectedIndex="{Binding Condition.Op, Mode=TwoWay}"
-                                      SelectionChanged="Field_SelectionChanged">
-                                <ComboBoxItem Content="="/><ComboBoxItem Content="&#x2260;"/><ComboBoxItem Content="&lt;"/>
-                                <ComboBoxItem Content="&#x2264;"/><ComboBoxItem Content="&gt;"/><ComboBoxItem Content="&#x2265;"/>
-                            </ComboBox>
-                            <TextBox Width="78" Height="28" LostFocus="Field_LostFocus"
-                                     Text="{Binding Condition.Value, UpdateSourceTrigger=LostFocus}"/>
+                            <ContentControl Content="{Binding Condition}" VerticalAlignment="Center"/>
                             <TextBlock Text="なら↓" FontWeight="Bold" Foreground="#FF3B2A00" VerticalAlignment="Center" Margin="6,0,0,0"/>
                         </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal">
@@ -471,15 +496,7 @@
                                 <StackPanel Margin="0,0,0,2">
                                     <StackPanel Orientation="Horizontal" Margin="12,2,0,2">
                                         <TextBlock Text="でなければもし" FontWeight="Bold" Foreground="#FF3B2A00" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                        <TextBox Width="78" Height="28" LostFocus="Field_LostFocus"
-                                                 Text="{Binding Condition.Var, UpdateSourceTrigger=LostFocus}"/>
-                                        <ComboBox Width="56" Height="28" Margin="4,0" SelectedIndex="{Binding Condition.Op, Mode=TwoWay}"
-                                                  SelectionChanged="Field_SelectionChanged">
-                                            <ComboBoxItem Content="="/><ComboBoxItem Content="&#x2260;"/><ComboBoxItem Content="&lt;"/>
-                                            <ComboBoxItem Content="&#x2264;"/><ComboBoxItem Content="&gt;"/><ComboBoxItem Content="&#x2265;"/>
-                                        </ComboBox>
-                                        <TextBox Width="78" Height="28" LostFocus="Field_LostFocus"
-                                                 Text="{Binding Condition.Value, UpdateSourceTrigger=LostFocus}"/>
+                                        <ContentControl Content="{Binding Condition}" VerticalAlignment="Center"/>
                                         <TextBlock Text="なら↓" FontWeight="Bold" Foreground="#FF3B2A00" VerticalAlignment="Center" Margin="6,0,8,0"/>
                                         <Button Content="&#x2715;" Width="26" Height="26" Padding="0" ToolTip="この分岐を削除" Click="RemoveElseIf_Click"/>
                                     </StackPanel>
@@ -699,11 +716,12 @@
                     </StackPanel>
                 </Border>
 
-                <!-- 本体: パレット | スクリプト | スプリッタ | プレビュー -->
+                <!-- 本体: ツールボックス | テンプレ画像 | スクリプト | スプリッタ | プレビュー -->
                 <Grid Grid.Row="1">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="230" MinWidth="180"/>
-                        <ColumnDefinition Width="*" MinWidth="260"/>
+                        <ColumnDefinition Width="210" MinWidth="170"/>
+                        <ColumnDefinition Width="220" MinWidth="170"/>
+                        <ColumnDefinition Width="*" MinWidth="240"/>
                         <ColumnDefinition Width="6"/>
                         <ColumnDefinition Width="380" MinWidth="220"/>
                     </Grid.ColumnDefinitions>
@@ -742,8 +760,67 @@
                         </ScrollViewer>
                     </Border>
 
+                    <!-- テンプレ画像フィールド -->
+                    <Border Grid.Column="1" Background="{StaticResource PanelBgBrush}"
+                            BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,1,0"
+                            AllowDrop="True" Drop="ImageField_Drop" DragOver="ImageField_DragOver">
+                        <Grid Margin="10">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <StackPanel Grid.Row="0">
+                                <TextBlock Text="テンプレ画像" FontWeight="SemiBold" FontSize="13" Margin="2,2,0,8"/>
+                                <Button Content="&#x2795; 画像を追加" Height="32" Click="AddImage_Click"
+                                        Style="{StaticResource AccentButton}"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,4">
+                                    <TextBlock Text="列数:" Foreground="{StaticResource TextDimBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <ComboBox x:Name="ImageColsBox" Width="56" Height="26" SelectionChanged="ImageColumns_Changed">
+                                        <ComboBoxItem Content="1"/>
+                                        <ComboBoxItem Content="2" IsSelected="True"/>
+                                        <ComboBoxItem Content="3"/>
+                                        <ComboBoxItem Content="4"/>
+                                    </ComboBox>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <TextBlock Grid.Row="1" Text="ここに画像をドロップ / 追加ボタンで選択"
+                                       Foreground="{StaticResource TextDimBrush}" FontSize="11" TextWrapping="Wrap"
+                                       Margin="2,0,0,6"/>
+
+                            <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                                <ItemsControl x:Name="ImageList">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <UniformGrid Columns="{Binding ImageColumns, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Margin="3" Background="{StaticResource EditorBgBrush}"
+                                                    BorderBrush="{StaticResource BorderStrongBrush}" BorderThickness="1" CornerRadius="3">
+                                                <Grid>
+                                                    <Image Source="{Binding FullPath}" Stretch="Uniform" MaxHeight="160" Margin="3"
+                                                           ToolTip="{Binding RelRef}"/>
+                                                    <Button Content="&#x2715;" Width="20" Height="20" Padding="0" FontSize="10"
+                                                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="2"
+                                                            ToolTip="削除" Click="DeleteImage_Click"/>
+                                                    <TextBlock Text="{Binding FileName}" FontSize="10" Foreground="White"
+                                                               HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                                                               Background="#99000000" Padding="3,1"/>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Grid>
+                    </Border>
+
                     <!-- スクリプト領域 -->
-                    <ScrollViewer x:Name="ScriptScroll" Grid.Column="1" VerticalScrollBarVisibility="Auto" Padding="18"
+                    <ScrollViewer x:Name="ScriptScroll" Grid.Column="2" VerticalScrollBarVisibility="Auto" Padding="18"
                                   Background="{StaticResource EditorBgBrush}">
                         <StackPanel>
                             <Border Background="#FF3C7D3C" CornerRadius="5" Padding="14,9" Margin="0,0,0,3">
@@ -763,12 +840,12 @@
                     </ScrollViewer>
 
                     <!-- スプリッタ(ブロック⇔プレビューの境界をドラッグでリサイズ) -->
-                    <GridSplitter Grid.Column="2" Width="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                    <GridSplitter Grid.Column="3" Width="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                                   Background="{StaticResource BorderStrongBrush}" Cursor="SizeWE"
                                   ResizeBehavior="PreviousAndNext" ResizeDirection="Columns"/>
 
                     <!-- プレビュー -->
-                    <Border Grid.Column="3" Background="{StaticResource PanelBgBrush}"
+                    <Border Grid.Column="4" Background="{StaticResource PanelBgBrush}"
                             BorderBrush="{StaticResource BorderBrush}" BorderThickness="1,0,0,0">
                         <Grid Margin="12">
                             <Grid.RowDefinitions>
@@ -787,7 +864,7 @@
                     </Border>
 
                     <!-- ドラッグ中のゴースト(ラベルチップ)/挿入ライン用オーバーレイ -->
-                    <Canvas x:Name="DragOverlay" Grid.Column="0" Grid.ColumnSpan="4"
+                    <Canvas x:Name="DragOverlay" Grid.Column="0" Grid.ColumnSpan="5"
                             IsHitTestVisible="False" Panel.ZIndex="100">
                         <Border x:Name="InsertLine" Height="3" Width="100" CornerRadius="1.5"
                                 Background="{StaticResource AccentBrush}" Visibility="Collapsed"/>

@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Windows.Media.Imaging;
 using PokeMacroBuilder.Models;
 
 namespace PokeMacroBuilder.Services;
@@ -128,6 +129,72 @@ public sealed class MacroStore
     {
         if (File.Exists(entry.FilePath))
             File.Delete(entry.FilePath);
+    }
+
+    // ============================================================
+    //  テンプレ画像 (Template/<macroStem>/ に配置)
+    // ============================================================
+    /// <summary>SerialController/Template フォルダ。</summary>
+    public string TemplateDir =>
+        Path.GetFullPath(Path.Combine(PythonCommandsDir, "..", "..", "Template"));
+
+    private static readonly string[] ImageExts = { ".png", ".jpg", ".jpeg", ".bmp" };
+
+    /// <summary>マクロの画像フォルダ名(ファイル名の拡張子なし)。未保存なら null。</summary>
+    public string? MacroStem(MacroDocument doc) =>
+        doc.FileName is null ? null : Path.GetFileNameWithoutExtension(doc.FileName);
+
+    public string? MacroTemplateDir(MacroDocument doc)
+    {
+        var stem = MacroStem(doc);
+        return stem is null ? null : Path.Combine(TemplateDir, stem);
+    }
+
+    /// <summary>マクロのテンプレ画像一覧。</summary>
+    public List<TemplateImage> ListImages(MacroDocument doc)
+    {
+        var list = new List<TemplateImage>();
+        var stem = MacroStem(doc);
+        var dir = MacroTemplateDir(doc);
+        if (stem is null || dir is null || !Directory.Exists(dir)) return list;
+
+        foreach (var f in Directory.EnumerateFiles(dir)
+                     .Where(f => ImageExts.Contains(Path.GetExtension(f).ToLowerInvariant()))
+                     .OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
+        {
+            var name = Path.GetFileName(f);
+            list.Add(new TemplateImage(name, f, $"{stem}/{name}"));
+        }
+        return list;
+    }
+
+    /// <summary>クロップ済み画像を Template/&lt;stem&gt;/imgN.png として保存する。</summary>
+    public TemplateImage AddImage(MacroDocument doc, BitmapSource image)
+    {
+        var stem = MacroStem(doc) ?? throw new InvalidOperationException("先にマクロを保存してください。");
+        var dir = MacroTemplateDir(doc)!;
+        Directory.CreateDirectory(dir);
+
+        int max = 0;
+        var rx = new Regex(@"^img(\d+)\.png$", RegexOptions.IgnoreCase);
+        foreach (var f in Directory.EnumerateFiles(dir, "*.png"))
+        {
+            var m = rx.Match(Path.GetFileName(f));
+            if (m.Success && int.TryParse(m.Groups[1].Value, out var n)) max = Math.Max(max, n);
+        }
+        var name = $"img{max + 1}.png";
+        var path = Path.Combine(dir, name);
+
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(image));
+        using (var fs = File.Create(path)) encoder.Save(fs);
+
+        return new TemplateImage(name, path, $"{stem}/{name}");
+    }
+
+    public void DeleteImage(MacroDocument doc, TemplateImage img)
+    {
+        if (File.Exists(img.FullPath)) File.Delete(img.FullPath);
     }
 }
 

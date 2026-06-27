@@ -51,12 +51,21 @@ public partial class MainWindow : Window
     private readonly List<string> _redo = new();
     private bool _suppressSnapshot;
 
+    // テンプレ画像フィールド
+    public ObservableCollection<TemplateImage> TemplateImages { get; } = new();
+    public ObservableCollection<string> TemplateImageRefs { get; } = new();
+
+    public static readonly DependencyProperty ImageColumnsProperty =
+        DependencyProperty.Register(nameof(ImageColumns), typeof(int), typeof(MainWindow), new PropertyMetadata(2));
+    public int ImageColumns { get => (int)GetValue(ImageColumnsProperty); set => SetValue(ImageColumnsProperty, value); }
+
     public MainWindow()
     {
         InitializeComponent();
         _settings = AppSettings.Load();
 
         TabBar.ItemsSource = _openDocs;
+        ImageList.ItemsSource = TemplateImages;
         BlocksHost.LostMouseCapture += (_, _) => EndDrag();
         _statusTimer.Tick += (_, _) => { _statusTimer.Stop(); StatusText.Text = _idleStatus; };
 
@@ -101,6 +110,7 @@ public partial class MainWindow : Window
 
         _editorLoaded = true;
         UpdateEditorHints();
+        LoadImages();
         UpdatePreview();
         ResetUndo();
     }
@@ -438,6 +448,115 @@ public partial class MainWindow : Window
     // 条件・テキスト等の編集 → プレビュー更新 + Undo記録
     private void Field_LostFocus(object sender, RoutedEventArgs e) => Edited();
     private void Field_SelectionChanged(object sender, SelectionChangedEventArgs e) => Edited();
+
+    // ============================================================
+    //  テンプレ画像フィールド
+    // ============================================================
+    private void LoadImages()
+    {
+        TemplateImages.Clear();
+        TemplateImageRefs.Clear();
+        if (_store is null || _activeDoc is null) return;
+        foreach (var img in _store.ListImages(_activeDoc))
+        {
+            TemplateImages.Add(img);
+            TemplateImageRefs.Add(img.RelRef);
+        }
+    }
+
+    /// <summary>画像を追加できる状態にする(未保存マクロは先に保存)。</summary>
+    private bool EnsureSavedForImages()
+    {
+        if (_store is null) { EnsureWorkspace(); return false; }
+        if (_activeDoc is null) return false;
+        if (_activeDoc.FileName is null)
+        {
+            SyncToDoc();
+            try { _store.Save(_activeDoc); }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "画像追加の前に保存が必要ですが、保存に失敗しました:\n" + ex.Message,
+                    "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
+                return false;
+            }
+            FlashStatus($"保存しました: {_activeDoc.FileName}");
+        }
+        return true;
+    }
+
+    private void AddImage_Click(object sender, RoutedEventArgs e)
+    {
+        if (!EnsureSavedForImages()) return;
+        var dlg = new OpenFileDialog
+        {
+            Title = "テンプレにする画像を選択",
+            Filter = "画像ファイル|*.png;*.jpg;*.jpeg;*.bmp|すべてのファイル|*.*",
+            Multiselect = true,
+        };
+        if (dlg.ShowDialog(this) == true)
+            ImportImages(dlg.FileNames);
+    }
+
+    private void ImageField_Drop(object sender, DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
+        if (!EnsureSavedForImages()) return;
+        var files = (string[])e.Data.GetData(DataFormats.FileDrop);
+        var imgs = files.Where(f =>
+        {
+            var ext = System.IO.Path.GetExtension(f).ToLowerInvariant();
+            return ext is ".png" or ".jpg" or ".jpeg" or ".bmp";
+        }).ToArray();
+        ImportImages(imgs);
+    }
+
+    private void ImageField_DragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void ImportImages(IEnumerable<string> paths)
+    {
+        if (_store is null || _activeDoc is null) return;
+        int added = 0;
+        foreach (var path in paths)
+        {
+            try
+            {
+                var crop = new CropWindow(path) { Owner = this };
+                if (crop.ShowDialog() == true && crop.Result != null)
+                {
+                    _store.AddImage(_activeDoc, crop.Result);
+                    added++;
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, $"画像の追加に失敗しました ({System.IO.Path.GetFileName(path)}):\n{ex.Message}",
+                    "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+        if (added > 0) { LoadImages(); FlashStatus($"テンプレ画像を {added} 件追加しました"); }
+    }
+
+    private void DeleteImage_Click(object sender, RoutedEventArgs e)
+    {
+        if (_store is null || _activeDoc is null) return;
+        if (((FrameworkElement)sender).DataContext is not TemplateImage img) return;
+        var res = MessageBox.Show(this, $"「{img.FileName}」を削除しますか?", "削除の確認",
+            MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        if (res != MessageBoxResult.Yes) return;
+        _store.DeleteImage(_activeDoc, img);
+        LoadImages();
+        UpdatePreview();
+    }
+
+    private void ImageColumns_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is ComboBox cb && cb.SelectedItem is ComboBoxItem it && int.TryParse(it.Content?.ToString(), out var n))
+            ImageColumns = n;
+    }
 
     private void PadButton_Click(object sender, RoutedEventArgs e)
     {

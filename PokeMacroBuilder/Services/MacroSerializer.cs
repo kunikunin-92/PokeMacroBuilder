@@ -35,9 +35,12 @@ internal sealed class BlockDto
     // 制御
     public int LoopKind { get; set; } = 1;
     public int Count { get; set; } = 10;
+    public int CondKind { get; set; }
     public string CondVar { get; set; } = "cnt";
     public int CondOp { get; set; }
     public string CondValue { get; set; } = "0";
+    public string CondImageRef { get; set; } = "";
+    public double CondThreshold { get; set; } = 0.8;
     public bool HasElse { get; set; }
     public List<BlockDto>? Children { get; set; }
     public List<BlockDto>? ElseChildren { get; set; }
@@ -54,9 +57,12 @@ internal sealed class BlockDto
 
 internal sealed class ElseIfDto
 {
+    public int CondKind { get; set; }
     public string CondVar { get; set; } = "cnt";
     public int CondOp { get; set; }
     public string CondValue { get; set; } = "0";
+    public string CondImageRef { get; set; } = "";
+    public double CondThreshold { get; set; } = 0.8;
     public List<BlockDto> Children { get; set; } = new();
 }
 
@@ -146,20 +152,23 @@ public static class MacroSerializer
                 return new BlockDto
                 {
                     Kind = "loop", LoopKind = lp.LoopKind, Count = lp.Count,
-                    CondVar = lp.Condition.Var, CondOp = lp.Condition.Op, CondValue = lp.Condition.Value,
+                    CondKind = lp.Condition.Kind, CondVar = lp.Condition.Var, CondOp = lp.Condition.Op,
+                    CondValue = lp.Condition.Value, CondImageRef = lp.Condition.ImageRef, CondThreshold = lp.Condition.Threshold,
                     Children = lp.Children.Select(BuildBlock).ToList(),
                 };
             case IfBlock ib:
                 return new BlockDto
                 {
                     Kind = "if",
-                    CondVar = ib.Condition.Var, CondOp = ib.Condition.Op, CondValue = ib.Condition.Value,
+                    CondKind = ib.Condition.Kind, CondVar = ib.Condition.Var, CondOp = ib.Condition.Op,
+                    CondValue = ib.Condition.Value, CondImageRef = ib.Condition.ImageRef, CondThreshold = ib.Condition.Threshold,
                     HasElse = ib.HasElse,
                     Children = ib.Children.Select(BuildBlock).ToList(),
                     ElseChildren = ib.ElseChildren.Select(BuildBlock).ToList(),
                     ElseIfs = ib.ElseIfs.Select(br => new ElseIfDto
                     {
-                        CondVar = br.Condition.Var, CondOp = br.Condition.Op, CondValue = br.Condition.Value,
+                        CondKind = br.Condition.Kind, CondVar = br.Condition.Var, CondOp = br.Condition.Op,
+                        CondValue = br.Condition.Value, CondImageRef = br.Condition.ImageRef, CondThreshold = br.Condition.Threshold,
                         Children = br.Children.Select(BuildBlock).ToList(),
                     }).ToList(),
                 };
@@ -202,7 +211,7 @@ public static class MacroSerializer
                 };
             case "loop":
                 var lp = new LoopBlock { LoopKind = b.LoopKind is >= 0 and <= 2 ? b.LoopKind : 1, Count = b.Count };
-                lp.Condition.Var = b.CondVar; lp.Condition.Op = b.CondOp; lp.Condition.Value = b.CondValue;
+                LoadCond(lp.Condition, b.CondKind, b.CondVar, b.CondOp, b.CondValue, b.CondImageRef, b.CondThreshold);
                 Fill(lp.Children, b.Children);
                 return lp;
             // ---- 旧形式の互換読み込み ----
@@ -226,14 +235,14 @@ public static class MacroSerializer
                 return oldWhile;
             case "if":
                 var ifb = new IfBlock { HasElse = b.HasElse };
-                ifb.Condition.Var = b.CondVar; ifb.Condition.Op = b.CondOp; ifb.Condition.Value = b.CondValue;
+                LoadCond(ifb.Condition, b.CondKind, b.CondVar, b.CondOp, b.CondValue, b.CondImageRef, b.CondThreshold);
                 Fill(ifb.Children, b.Children);
                 Fill(ifb.ElseChildren, b.ElseChildren);
                 if (b.ElseIfs != null)
                     foreach (var ed in b.ElseIfs)
                     {
                         var br = new ElseIfBranch();
-                        br.Condition.Var = ed.CondVar; br.Condition.Op = ed.CondOp; br.Condition.Value = ed.CondValue;
+                        LoadCond(br.Condition, ed.CondKind, ed.CondVar, ed.CondOp, ed.CondValue, ed.CondImageRef, ed.CondThreshold);
                         Fill(br.Children, ed.Children);
                         ifb.ElseIfs.Add(br);
                     }
@@ -255,5 +264,15 @@ public static class MacroSerializer
     {
         if (src is null) return;
         foreach (var c in src) dest.Add(BuildModel(c));
+    }
+
+    private static void LoadCond(Condition c, int kind, string var, int op, string value, string imageRef, double threshold)
+    {
+        c.Kind = kind is 0 or 1 ? kind : 0;
+        c.Var = var;
+        c.Op = op;
+        c.Value = value;
+        c.ImageRef = imageRef ?? "";
+        c.Threshold = threshold is > 0 and <= 1 ? threshold : 0.8;
     }
 }

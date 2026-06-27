@@ -35,7 +35,10 @@ public static class PythonGenerator
     {
         var className = ClassNameFromFile(fileName);
         bool requiresCam = AllBlocks(doc.Blocks).Any(b =>
-            b is ScreenshotBlock || (b is NotifyBlock nb && nb.AttachScreenshot));
+            b is ScreenshotBlock
+            || (b is NotifyBlock nb && nb.AttachScreenshot)
+            || (b is IfBlock ib && (ib.Condition.Kind == 1 || ib.ElseIfs.Any(br => br.Condition.Kind == 1)))
+            || (b is LoopBlock lb && lb.LoopKind == 2 && lb.Condition.Kind == 1));
         string baseClass = requiresCam ? "ImageProcPythonCommand" : "PythonCommand";
 
         var sb = new StringBuilder();
@@ -240,6 +243,11 @@ public static class PythonGenerator
 
     private static string Cond(Condition c)
     {
+        if (c.Kind == 1)
+        {
+            var th = c.Threshold is > 0 and <= 1 ? c.Threshold : 0.8;
+            return $"self.isContainTemplate('{EscapeQuote(c.ImageRef)}', threshold={Num(th)})";
+        }
         int op = c.Op is >= 0 and < 6 ? c.Op : 0;
         return $"self.{SanitizeVar(c.Var)} {CmpOps[op]} {ValueLiteral(c.Value)}";
     }
@@ -275,10 +283,10 @@ public static class PythonGenerator
             switch (b)
             {
                 case VariableBlock v: Add(SanitizeVar(v.Name)); break;
-                case LoopBlock l when l.LoopKind == 2: Add(SanitizeVar(l.Condition.Var)); break;
+                case LoopBlock l when l.LoopKind == 2 && l.Condition.Kind == 0: Add(SanitizeVar(l.Condition.Var)); break;
                 case IfBlock i:
-                    Add(SanitizeVar(i.Condition.Var));
-                    foreach (var br in i.ElseIfs) Add(SanitizeVar(br.Condition.Var));
+                    if (i.Condition.Kind == 0) Add(SanitizeVar(i.Condition.Var));
+                    foreach (var br in i.ElseIfs) if (br.Condition.Kind == 0) Add(SanitizeVar(br.Condition.Var));
                     break;
                 case NotifyBlock n:
                     foreach (System.Text.RegularExpressions.Match m in Placeholder.Matches(n.Text ?? ""))
