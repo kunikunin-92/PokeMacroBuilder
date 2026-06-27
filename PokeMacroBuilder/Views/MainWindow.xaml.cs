@@ -489,7 +489,15 @@ public partial class MainWindow : Window
         return true;
     }
 
-    private void AddImage_Click(object sender, RoutedEventArgs e)
+    private void AddImage_Click(object sender, RoutedEventArgs e) => PickAndImport(null);
+
+    private void AddFromCaptures_Click(object sender, RoutedEventArgs e)
+    {
+        var dir = _store?.CapturesDir;
+        PickAndImport(dir is not null && System.IO.Directory.Exists(dir) ? dir : null);
+    }
+
+    private void PickAndImport(string? initialDir)
     {
         if (!EnsureSavedForImages()) return;
         var dlg = new OpenFileDialog
@@ -498,6 +506,7 @@ public partial class MainWindow : Window
             Filter = "画像ファイル|*.png;*.jpg;*.jpeg;*.bmp|すべてのファイル|*.*",
             Multiselect = true,
         };
+        if (initialDir is not null) dlg.InitialDirectory = initialDir;
         if (dlg.ShowDialog(this) == true)
             ImportImages(dlg.FileNames);
     }

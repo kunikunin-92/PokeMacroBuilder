@@ -138,6 +138,10 @@ public sealed class MacroStore
     public string TemplateDir =>
         Path.GetFullPath(Path.Combine(PythonCommandsDir, "..", "..", "Template"));
 
+    /// <summary>SerialController/Captures フォルダ(スクショ保存先)。</summary>
+    public string CapturesDir =>
+        Path.GetFullPath(Path.Combine(PythonCommandsDir, "..", "..", "Captures"));
+
     private static readonly string[] ImageExts = { ".png", ".jpg", ".jpeg", ".bmp" };
 
     /// <summary>マクロの画像フォルダ名(ファイル名の拡張子なし)。未保存なら null。</summary>
