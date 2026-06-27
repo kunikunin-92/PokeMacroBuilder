@@ -846,6 +846,9 @@ public partial class MainWindow : Window
         _redo.Clear();
     }
 
+    private void Undo_Click(object sender, RoutedEventArgs e) => Undo();
+    private void Redo_Click(object sender, RoutedEventArgs e) => Redo();
+
     private void Undo()
     {
         if (_activeDoc is null || _undo.Count < 2) return;

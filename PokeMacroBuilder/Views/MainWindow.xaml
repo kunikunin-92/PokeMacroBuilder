@@ -59,7 +59,7 @@
 
                     <StackPanel>
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#x1F3AE;" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Text="&#x2630;" FontSize="12" Foreground="#80000000" VerticalAlignment="Center" Margin="0,0,8,0" ToolTip="ここをドラッグして移動" Cursor="SizeAll"/><TextBlock Text="&#x1F3AE;" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
                             <TextBlock Text="ボタン" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" Margin="0,0,10,0"/>
                             <ComboBox Width="120" Height="28" SelectedIndex="{Binding Mode, Mode=TwoWay}"
                                       SelectionChanged="Field_SelectionChanged">
@@ -187,7 +187,7 @@
 
                     <StackPanel Grid.Column="1" Margin="14,0,0,0">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#x1F579;" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Text="&#x2630;" FontSize="12" Foreground="#80000000" VerticalAlignment="Center" Margin="0,0,8,0" ToolTip="ここをドラッグして移動" Cursor="SizeAll"/><TextBlock Text="&#x1F579;" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
                             <TextBlock Text="スティック / 方向" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
                         </StackPanel>
 
@@ -241,7 +241,7 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#x23F1;" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBlock Text="&#x2630;" FontSize="12" Foreground="#80000000" VerticalAlignment="Center" Margin="0,0,8,0" ToolTip="ここをドラッグして移動" Cursor="SizeAll"/><TextBlock Text="&#x23F1;" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
                         <TextBlock Text="待機する" FontWeight="Bold" Foreground="#FF3B2A00" VerticalAlignment="Center"/>
                         <TextBox Width="74" Height="28" Margin="12,0,3,0" LostFocus="NumberField_LostFocus"
                                  Text="{Binding Seconds, StringFormat=0.###, UpdateSourceTrigger=LostFocus}"/>
@@ -267,7 +267,7 @@
                         <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#x1F516;" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBlock Text="&#x2630;" FontSize="12" Foreground="#80000000" VerticalAlignment="Center" Margin="0,0,8,0" ToolTip="ここをドラッグして移動" Cursor="SizeAll"/><TextBlock Text="&#x1F516;" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
                         <TextBlock Text="変数" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" Margin="0,0,8,0"/>
                         <TextBox Width="90" Height="28" LostFocus="Field_LostFocus"
                                  Text="{Binding Name, UpdateSourceTrigger=LostFocus}"/>
@@ -309,7 +309,7 @@
                         <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#x1F4DD;" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBlock Text="&#x2630;" FontSize="12" Foreground="#80000000" VerticalAlignment="Center" Margin="0,0,8,0" ToolTip="ここをドラッグして移動" Cursor="SizeAll"/><TextBlock Text="&#x1F4DD;" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
                         <TextBlock Text="ログ出力" FontWeight="Bold" Foreground="#FF06384B" VerticalAlignment="Center" Margin="0,0,8,0"/>
                         <TextBox Width="280" Height="28" LostFocus="Field_LostFocus"
                                  Text="{Binding Text, UpdateSourceTrigger=LostFocus}"/>
@@ -332,7 +332,7 @@
                     </Grid.ColumnDefinitions>
                     <StackPanel>
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#x1F4E2;" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Text="&#x2630;" FontSize="12" Foreground="#80000000" VerticalAlignment="Center" Margin="0,0,8,0" ToolTip="ここをドラッグして移動" Cursor="SizeAll"/><TextBlock Text="&#x1F4E2;" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
                             <TextBlock Text="Discord通知" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
@@ -364,12 +364,9 @@
                         <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#x1F4F7;" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBlock Text="&#x2630;" FontSize="12" Foreground="#80000000" VerticalAlignment="Center" Margin="0,0,8,0" ToolTip="ここをドラッグして移動" Cursor="SizeAll"/><TextBlock Text="&#x1F4F7;" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
                         <TextBlock Text="スクショ保存" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                        <TextBox Width="200" Height="28" LostFocus="Field_LostFocus"
-                                 ToolTip="空欄なら日時で自動命名 (.pngは自動付与)"
-                                 Text="{Binding Name, UpdateSourceTrigger=LostFocus}"/>
-                        <TextBlock Text="(Captures に保存)" Foreground="#DDFFFFFF" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                        <TextBlock Text="(日時で自動命名し Captures に保存)" Foreground="#DDFFFFFF" VerticalAlignment="Center"/>
                     </StackPanel>
                     <StackPanel Grid.Column="1" VerticalAlignment="Top">
                         <Button Content="&#x25B2;" Width="30" Height="26" Margin="0,0,0,3" Padding="0" ToolTip="上へ" Click="MoveUp_Click"/>
@@ -387,7 +384,7 @@
                     <Grid Margin="12,8">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#x1F501;" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Text="&#x2630;" FontSize="12" Foreground="#80000000" VerticalAlignment="Center" Margin="0,0,8,0" ToolTip="ここをドラッグして移動" Cursor="SizeAll"/><TextBlock Text="&#x1F501;" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
                             <TextBlock Text="ループ" FontWeight="Bold" Foreground="#FF3B2A00" VerticalAlignment="Center" Margin="0,0,8,0"/>
                             <ComboBox Width="100" Height="28" SelectedIndex="{Binding LoopKind, Mode=TwoWay}"
                                       SelectionChanged="Field_SelectionChanged">
@@ -442,7 +439,7 @@
                     <Grid Margin="12,8">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#x2753;" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Text="&#x2630;" FontSize="12" Foreground="#80000000" VerticalAlignment="Center" Margin="0,0,8,0" ToolTip="ここをドラッグして移動" Cursor="SizeAll"/><TextBlock Text="&#x2753;" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
                             <TextBlock Text="条件分岐  もし" FontWeight="Bold" Foreground="#FF3B2A00" VerticalAlignment="Center" Margin="0,0,8,0"/>
                             <TextBox Width="78" Height="28" LostFocus="Field_LostFocus"
                                      Text="{Binding Condition.Var, UpdateSourceTrigger=LostFocus}"/>
@@ -694,8 +691,12 @@
                         BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="表示名:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                        <TextBox x:Name="DisplayNameBox" Width="260" Height="30" VerticalAlignment="Center" Margin="0,0,20,0"
+                        <TextBox x:Name="DisplayNameBox" Width="260" Height="30" VerticalAlignment="Center" Margin="0,0,12,0"
                                  TextChanged="DisplayNameBox_TextChanged" LostFocus="Field_LostFocus"/>
+                        <Button Content="&#x21B6;" Width="34" Height="30" Margin="0,0,4,0" Padding="0" FontSize="16"
+                                ToolTip="元に戻す (Ctrl+Z)" Click="Undo_Click"/>
+                        <Button Content="&#x21B7;" Width="34" Height="30" Margin="0,0,20,0" Padding="0" FontSize="16"
+                                ToolTip="やり直し (Ctrl+Y)" Click="Redo_Click"/>
                         <TextBlock Text="繰り返し:" VerticalAlignment="Center" Margin="0,0,6,0"/>
                         <ComboBox x:Name="LoopBox" Width="130" Height="30" VerticalAlignment="Center"
                                   SelectionChanged="LoopBox_SelectionChanged">
@@ -730,16 +731,16 @@
                             <TextBlock Text="入力" Foreground="{StaticResource TextDimBrush}" FontSize="11" Margin="2,0,0,4"/>
                             <Button Style="{StaticResource PaletteBlockButton}" Tag="press" Background="#FF4C97FF" BorderBrush="#FF3B7DDB">
                                 <StackPanel Orientation="Horizontal"><TextBlock Text="&#x1F3AE;" Margin="2,0,8,0"/><TextBlock Text="ボタン" FontWeight="Bold" Foreground="White"/></StackPanel></Button>
-                            <Button Style="{StaticResource PaletteBlockButton}" Tag="stick" Background="#FF9966FF" BorderBrush="#FF7A4DDB">
+                            <Button Style="{StaticResource PaletteBlockButton}" Tag="stick" Margin="0,0,0,10" Background="#FF9966FF" BorderBrush="#FF7A4DDB">
                                 <StackPanel Orientation="Horizontal"><TextBlock Text="&#x1F579;" Margin="2,0,8,0"/><TextBlock Text="スティック" FontWeight="Bold" Foreground="White"/></StackPanel></Button>
-                            <Button Style="{StaticResource PaletteBlockButton}" Tag="wait" Margin="0,0,0,10" Background="#FFFFAB19" BorderBrush="#FFD98E0F">
-                                <StackPanel Orientation="Horizontal"><TextBlock Text="&#x23F1;" Margin="2,0,8,0"/><TextBlock Text="待機" FontWeight="Bold" Foreground="#FF3B2A00"/></StackPanel></Button>
 
                             <TextBlock Text="制御フロー" Foreground="{StaticResource TextDimBrush}" FontSize="11" Margin="2,0,0,4"/>
                             <Button Style="{StaticResource PaletteBlockButton}" Tag="if" Background="#FFE6A817" BorderBrush="#FFC78F0E">
                                 <StackPanel Orientation="Horizontal"><TextBlock Text="&#x2753;" Margin="2,0,8,0"/><TextBlock Text="条件分岐" FontWeight="Bold" Foreground="#FF3B2A00"/></StackPanel></Button>
-                            <Button Style="{StaticResource PaletteBlockButton}" Tag="loop" Margin="0,0,0,10" Background="#FFE6A817" BorderBrush="#FFC78F0E">
+                            <Button Style="{StaticResource PaletteBlockButton}" Tag="loop" Background="#FFE6A817" BorderBrush="#FFC78F0E">
                                 <StackPanel Orientation="Horizontal"><TextBlock Text="&#x1F501;" Margin="2,0,8,0"/><TextBlock Text="ループ" FontWeight="Bold" Foreground="#FF3B2A00"/></StackPanel></Button>
+                            <Button Style="{StaticResource PaletteBlockButton}" Tag="wait" Margin="0,0,0,10" Background="#FFFFAB19" BorderBrush="#FFD98E0F">
+                                <StackPanel Orientation="Horizontal"><TextBlock Text="&#x23F1;" Margin="2,0,8,0"/><TextBlock Text="待機" FontWeight="Bold" Foreground="#FF3B2A00"/></StackPanel></Button>
 
                             <TextBlock Text="データ・通知" Foreground="{StaticResource TextDimBrush}" FontSize="11" Margin="2,0,0,4"/>
                             <Button Style="{StaticResource PaletteBlockButton}" Tag="var" Background="#FFFF8C1A" BorderBrush="#FFD9750E">
