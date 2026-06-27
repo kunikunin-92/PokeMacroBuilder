@@ -59,6 +59,10 @@ public partial class MainWindow : Window
         DependencyProperty.Register(nameof(ImageColumns), typeof(int), typeof(MainWindow), new PropertyMetadata(2));
     public int ImageColumns { get => (int)GetValue(ImageColumnsProperty); set => SetValue(ImageColumnsProperty, value); }
 
+    public static readonly DependencyProperty ThumbWidthProperty =
+        DependencyProperty.Register(nameof(ThumbWidth), typeof(double), typeof(MainWindow), new PropertyMetadata(100.0));
+    public double ThumbWidth { get => (double)GetValue(ThumbWidthProperty); set => SetValue(ThumbWidthProperty, value); }
+
     public MainWindow()
     {
         InitializeComponent();
@@ -462,6 +466,7 @@ public partial class MainWindow : Window
             TemplateImages.Add(img);
             TemplateImageRefs.Add(img.RelRef);
         }
+        UpdateThumbWidth();
     }
 
     /// <summary>画像を追加できる状態にする(未保存マクロは先に保存)。</summary>
@@ -555,7 +560,24 @@ public partial class MainWindow : Window
     private void ImageColumns_Changed(object sender, SelectionChangedEventArgs e)
     {
         if (sender is ComboBox cb && cb.SelectedItem is ComboBoxItem it && int.TryParse(it.Content?.ToString(), out var n))
+        {
             ImageColumns = n;
+            UpdateThumbWidth();
+        }
+    }
+
+    private void ImageScroll_SizeChanged(object sender, SizeChangedEventArgs e) => UpdateThumbWidth();
+
+    private void UpdateThumbWidth()
+    {
+        if (ImageScroll is null) return;
+        double avail = ImageScroll.ViewportWidth;
+        if (avail <= 0) avail = ImageScroll.ActualWidth;
+        if (avail <= 0) return;
+        int cols = ImageColumns < 1 ? 1 : ImageColumns;
+        // 各サムネ Border は Margin 3*2、内部 Image Margin 3*2 を含む
+        double w = (avail - 2) / cols - 6;
+        ThumbWidth = Math.Max(36, w);
     }
 
     private void PadButton_Click(object sender, RoutedEventArgs e)
