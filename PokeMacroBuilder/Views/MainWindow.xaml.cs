@@ -550,6 +550,7 @@ public partial class MainWindow : Window
             }
         }
         if (added > 0) { LoadImages(); FlashStatus($"テンプレ画像を {added} 件追加しました"); }
+        Activate();   // 追加後はメインウィンドウにフォーカスを戻す
     }
 
     private void DeleteImage_Click(object sender, RoutedEventArgs e)
