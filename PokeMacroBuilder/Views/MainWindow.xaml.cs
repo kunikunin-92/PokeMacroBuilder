@@ -505,14 +505,21 @@ public partial class MainWindow : Window
     private void ImageField_Drop(object sender, DragEventArgs e)
     {
         if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
-        if (!EnsureSavedForImages()) return;
-        var files = (string[])e.Data.GetData(DataFormats.FileDrop);
-        var imgs = files.Where(f =>
+        var imgs = ((string[])e.Data.GetData(DataFormats.FileDrop)).Where(f =>
         {
             var ext = System.IO.Path.GetExtension(f).ToLowerInvariant();
             return ext is ".png" or ".jpg" or ".jpeg" or ".bmp";
         }).ToArray();
-        ImportImages(imgs);
+        e.Handled = true;
+        if (imgs.Length == 0) return;
+
+        // ドロップ(OLE)操作を先に完了させてからトリミング窓などを開く
+        // (ここで同期的にモーダルを開くとエクスプローラー側がフリーズする)
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (!EnsureSavedForImages()) return;
+            ImportImages(imgs);
+        }), System.Windows.Threading.DispatcherPriority.Background);
     }
 
     private void ImageField_DragOver(object sender, DragEventArgs e)
