@@ -32,21 +32,23 @@ public partial class MainWindow : Window
     private string _idleStatus = "準備完了";
     private readonly DispatcherTimer _statusTimer = new() { Interval = TimeSpan.FromSeconds(3) };
 
-    // 追加先(ネスト対応)
-    private ObservableCollection<MacroBlock>? _targetCollection;
-    private ContainerBlock? _targetContainer;
-
-    // ドラッグ並べ替え状態
+    // ドラッグ配置/並べ替え状態
+    private enum DragKind { None, Move, NewBlock }
+    private DragKind _dragKind;
     private bool _dragArmed;
     private bool _dragging;
+    private bool _paletteDragged;
     private Point _dragStart;
     private Point _grab;
-    private MacroBlock? _dragBlock;
-    private ItemsControl? _dragHost;
-    private ObservableCollection<MacroBlock>? _dragCollection;
-    private FrameworkElement? _dragContainer;
+    private MacroBlock? _moveBlock;           // 既存ブロックの移動
+    private Func<MacroBlock?>? _newFactory;    // パレットからの新規
+    private FrameworkElement? _srcElement;     // ゴースト元
+    private FrameworkElement? _dimmed;         // 移動中に薄くする元コンテナ
     private DragGhostAdorner? _ghost;
-    private AdornerLayer? _ghostLayer;
+    private InsertionAdorner? _insAdorner;
+    private AdornerLayer? _adornerLayer;
+    private ObservableCollection<MacroBlock>? _dropColl;
+    private int _dropIndex;
 
     public MainWindow()
     {
@@ -99,7 +101,6 @@ public partial class MainWindow : Window
         LoopCountBox.Text = doc.LoopCount.ToString(CultureInfo.InvariantCulture);
         BlocksHost.ItemsSource = doc.Blocks;
         SetBlocksSubscription(doc);
-        ResetTarget(doc);
 
         HomePanel.Visibility = Visibility.Collapsed;
         EditorPanel.Visibility = Visibility.Visible;
@@ -394,62 +395,34 @@ public partial class MainWindow : Window
         EmptyScriptHint.Visibility = _activeDoc.Blocks.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    // ---- ブロック追加(追加先=ルート or 選択中コンテナ) ----
-    private void AddToTarget(MacroBlock b)
+    // ---- ブロック追加(クリック=末尾へ、ドラッグ=任意位置へ) ----
+    private static MacroBlock? CreateByKind(string? kind) => kind switch
     {
+        "press" => new PressBlock(),
+        "stick" => new StickBlock(),
+        "wait" => new WaitBlock(),
+        "loop" => new LoopBlock(),
+        "if" => new IfBlock(),
+        "var" => new VariableBlock(),
+        "log" => new LogBlock(),
+        "notify" => new NotifyBlock(),
+        "screenshot" => new ScreenshotBlock(),
+        _ => null,
+    };
+
+    private void PaletteBlock_Click(object sender, RoutedEventArgs e)
+    {
+        if (_paletteDragged) { _paletteDragged = false; return; } // ドラッグ後のClickは無視
         if (_activeDoc is null) return;
-        var coll = _targetCollection ?? _activeDoc.Blocks;
-        coll.Add(b);
-        UpdateEditorHints();
-        UpdatePreview();
+        if (sender is FrameworkElement fe && CreateByKind(fe.Tag as string) is { } nb)
+        {
+            _activeDoc.Blocks.Add(nb);
+            UpdateEditorHints();
+            UpdatePreview();
+        }
     }
 
-    private void AddPress_Click(object sender, RoutedEventArgs e) => AddToTarget(new PressBlock());
-    private void AddStick_Click(object sender, RoutedEventArgs e) => AddToTarget(new StickBlock());
-    private void AddWait_Click(object sender, RoutedEventArgs e) => AddToTarget(new WaitBlock());
-    private void AddLoop_Click(object sender, RoutedEventArgs e) => AddToTarget(new LoopBlock());
-    private void AddIf_Click(object sender, RoutedEventArgs e) => AddToTarget(new IfBlock());
-    private void AddVariable_Click(object sender, RoutedEventArgs e) => AddToTarget(new VariableBlock());
-    private void AddLog_Click(object sender, RoutedEventArgs e) => AddToTarget(new LogBlock());
-    private void AddNotify_Click(object sender, RoutedEventArgs e) => AddToTarget(new NotifyBlock());
-    private void AddScreenshot_Click(object sender, RoutedEventArgs e) => AddToTarget(new ScreenshotBlock());
-
-    // ---- 追加先(ターゲット)選択 ----
-    private void SetTargetHere_Click(object sender, RoutedEventArgs e)
-    {
-        if (((FrameworkElement)sender).DataContext is not ContainerBlock c || _activeDoc is null) return;
-        ClearTargets();
-        c.IsTarget = true;
-        _targetContainer = c;
-        _targetCollection = c.Children;
-        UpdateTargetLabel();
-    }
-
-    private void ResetTarget_Click(object sender, RoutedEventArgs e)
-    {
-        if (_activeDoc != null) ResetTarget(_activeDoc);
-    }
-
-    private void ResetTarget(MacroDocument doc)
-    {
-        ClearTargets();
-        _targetContainer = null;
-        _targetCollection = doc.Blocks;
-        UpdateTargetLabel();
-    }
-
-    private void ClearTargets()
-    {
-        if (_activeDoc is null) return;
-        foreach (var b in PythonGenerator.AllBlocks(_activeDoc.Blocks))
-            if (b is ContainerBlock cb) cb.IsTarget = false;
-    }
-
-    private void UpdateTargetLabel()
-    {
-        TargetLabel.Text = _targetContainer is null ? "ルート" : _targetContainer.Kind;
-    }
-
+    // ---- 条件分岐: elif / else ----
     private void IfElseToggle_Click(object sender, RoutedEventArgs e)
     {
         if (((FrameworkElement)sender).DataContext is IfBlock ib)
@@ -457,6 +430,23 @@ public partial class MainWindow : Window
             ib.HasElse = !ib.HasElse;
             UpdatePreview();
         }
+    }
+
+    private void AddElseIf_Click(object sender, RoutedEventArgs e)
+    {
+        if (((FrameworkElement)sender).DataContext is IfBlock ib)
+        {
+            ib.AddElseIf();
+            UpdatePreview();
+        }
+    }
+
+    private void RemoveElseIf_Click(object sender, RoutedEventArgs e)
+    {
+        if (_activeDoc is null || ((FrameworkElement)sender).DataContext is not ElseIfBranch br) return;
+        foreach (var b in PythonGenerator.AllBlocks(_activeDoc.Blocks))
+            if (b is IfBlock ib && ib.ElseIfs.Contains(br)) { ib.RemoveElseIf(br); break; }
+        UpdatePreview();
     }
 
     // 条件・テキスト等の編集 → プレビュー更新
@@ -518,16 +508,12 @@ public partial class MainWindow : Window
     private void DeleteBlock_Click(object sender, RoutedEventArgs e)
     {
         if (_activeDoc is null || ((FrameworkElement)sender).DataContext is not MacroBlock b) return;
-        var coll = FindParentCollection(b);
-        coll?.Remove(b);
-        // 追加先がツリーから消えたらルートへ
-        if (_targetContainer != null && !PythonGenerator.AllBlocks(_activeDoc.Blocks).Contains(_targetContainer))
-            ResetTarget(_activeDoc);
+        FindParentCollection(b)?.Remove(b);
         UpdateEditorHints();
         UpdatePreview();
     }
 
-    /// <summary>ブロックの親コレクション(ルート/コンテナのChildren/Else)を返す。</summary>
+    /// <summary>ブロックの親コレクション(ルート/コンテナのChildren/Else/elif)を返す。</summary>
     private ObservableCollection<MacroBlock>? FindParentCollection(MacroBlock target)
     {
         if (_activeDoc is null) return null;
@@ -540,7 +526,10 @@ public partial class MainWindow : Window
             {
                 if (b is IfBlock ib)
                 {
-                    var r = Search(ib.Children) ?? Search(ib.ElseChildren);
+                    var r = Search(ib.Children);
+                    if (r != null) return r;
+                    foreach (var br in ib.ElseIfs) { r = Search(br.Children); if (r != null) return r; }
+                    r = Search(ib.ElseChildren);
                     if (r != null) return r;
                 }
                 else if (b is ContainerBlock cb)
@@ -553,92 +542,163 @@ public partial class MainWindow : Window
         }
     }
 
-    // ---- ドラッグ並べ替え(同じ親の中で。ゴースト追従 + 周囲がリアルタイムで避ける) ----
-    private void BlocksHost_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+    // ============================================================
+    //  ドラッグ配置(パレット→任意位置 / 既存ブロックの移動)
+    // ============================================================
+    private void PaletteBlock_Down(object sender, MouseButtonEventArgs e)
     {
         _dragArmed = false;
-        if (IsOverInteractive(e.OriginalSource as DependencyObject)) return;
+        _paletteDragged = false;
+        if (_activeDoc is null || sender is not FrameworkElement fe) return;
+        if (CreateByKind(fe.Tag as string) is null) return;
 
-        var host = FindItemsHost(e.OriginalSource as DependencyObject);
-        var block = FindBlock(e.OriginalSource as DependencyObject);
-        if (host is null || block is null) return;
-        if (host.ItemsSource is not ObservableCollection<MacroBlock> coll || !coll.Contains(block)) return;
-
-        _dragHost = host;
-        _dragCollection = coll;
-        _dragBlock = block;
+        var kind = fe.Tag as string;
+        _dragKind = DragKind.NewBlock;
+        _newFactory = () => CreateByKind(kind);
+        _srcElement = fe;
         _dragStart = e.GetPosition(BlocksHost);
         _dragArmed = true;
     }
 
-    private void BlocksHost_PreviewMouseMove(object sender, MouseEventArgs e)
+    private void PaletteBlock_Move(object sender, MouseEventArgs e)
     {
-        if (!_dragArmed || _dragBlock is null) return;
+        if (_dragging || !_dragArmed || _dragKind != DragKind.NewBlock) return;
         if (e.LeftButton != MouseButtonState.Pressed) return;
-
-        var posRoot = e.GetPosition(BlocksHost);
-        if (!_dragging)
-        {
-            if (Math.Abs(posRoot.X - _dragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
-                Math.Abs(posRoot.Y - _dragStart.Y) < SystemParameters.MinimumVerticalDragDistance)
-                return;
-            BeginDrag(e);
-            if (!_dragging) return;
-        }
-
-        _ghost?.UpdatePosition(new Point(posRoot.X - _grab.X, posRoot.Y - _grab.Y));
-        if (_dragHost != null) ReorderTo(e.GetPosition(_dragHost));
-        AutoScroll(e);
+        if (!MovedEnough(e)) return;
+        _paletteDragged = true;
+        BeginDrag(e);
+        if (_dragging) DragUpdate(e);
     }
 
-    private void BlocksHost_PreviewMouseUp(object sender, MouseButtonEventArgs e) => EndDrag();
+    private void BlocksHost_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        _dragArmed = false;
+        if (IsOverInteractive(e.OriginalSource as DependencyObject)) return;
+        var block = FindBlock(e.OriginalSource as DependencyObject);
+        if (block is null) return;
+
+        _dragKind = DragKind.Move;
+        _moveBlock = block;
+        _srcElement = FindBlockContainer(e.OriginalSource as DependencyObject, block);
+        _dragStart = e.GetPosition(BlocksHost);
+        _dragArmed = _srcElement != null;
+    }
+
+    private void BlocksHost_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (_dragging) { DragUpdate(e); return; }
+        if (!_dragArmed || _dragKind != DragKind.Move) return;
+        if (e.LeftButton != MouseButtonState.Pressed) return;
+        if (!MovedEnough(e)) return;
+        BeginDrag(e);
+        if (_dragging) DragUpdate(e);
+    }
+
+    private void BlocksHost_PreviewMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (_dragging) PerformDrop();
+        EndDrag();
+    }
+
+    private bool MovedEnough(MouseEventArgs e)
+    {
+        var p = e.GetPosition(BlocksHost);
+        return Math.Abs(p.X - _dragStart.X) >= SystemParameters.MinimumHorizontalDragDistance ||
+               Math.Abs(p.Y - _dragStart.Y) >= SystemParameters.MinimumVerticalDragDistance;
+    }
 
     private void BeginDrag(MouseEventArgs e)
     {
-        if (_dragBlock is null || _dragHost is null) return;
-        _dragContainer = _dragHost.ItemContainerGenerator.ContainerFromItem(_dragBlock) as FrameworkElement;
-        if (_dragContainer is null || _dragContainer.ActualWidth < 1 || _dragContainer.ActualHeight < 1)
+        if (_srcElement is null || _srcElement.ActualWidth < 1 || _srcElement.ActualHeight < 1)
         {
             _dragArmed = false;
             return;
         }
+        _grab = e.GetPosition(_srcElement);
 
-        _grab = e.GetPosition(_dragContainer);
-
-        var size = new Size(_dragContainer.ActualWidth, _dragContainer.ActualHeight);
+        var size = new Size(_srcElement.ActualWidth, _srcElement.ActualHeight);
         var bmp = new RenderTargetBitmap(
             (int)Math.Ceiling(size.Width), (int)Math.Ceiling(size.Height), 96, 96, PixelFormats.Pbgra32);
-        bmp.Render(_dragContainer);
+        bmp.Render(_srcElement);
         bmp.Freeze();
 
-        _ghostLayer = AdornerLayer.GetAdornerLayer(BlocksHost);
-        if (_ghostLayer is null) { _dragArmed = false; return; }
+        _adornerLayer = AdornerLayer.GetAdornerLayer(BlocksHost);
+        if (_adornerLayer is null) { _dragArmed = false; return; }
 
         _ghost = new DragGhostAdorner(BlocksHost, bmp, size);
-        _ghostLayer.Add(_ghost);
-        _dragContainer.Opacity = 0.35;
+        _adornerLayer.Add(_ghost);
+        _insAdorner = new InsertionAdorner(BlocksHost);
+        _adornerLayer.Add(_insAdorner);
+
+        if (_dragKind == DragKind.Move) { _dimmed = _srcElement; _srcElement.Opacity = 0.35; }
 
         _dragging = true;
         BlocksHost.CaptureMouse();
     }
 
-    private void ReorderTo(Point posInHost)
+    private void DragUpdate(MouseEventArgs e)
     {
-        if (_dragHost is null || _dragCollection is null || _dragBlock is null) return;
-        int from = _dragCollection.IndexOf(_dragBlock);
-        if (from < 0) return;
+        var posRoot = e.GetPosition(BlocksHost);
+        _ghost?.UpdatePosition(new Point(posRoot.X - _grab.X, posRoot.Y - _grab.Y));
+        ComputeDropTarget(posRoot);
+        AutoScroll(e);
+    }
 
-        int insert = 0;
-        for (int i = 0; i < _dragCollection.Count; i++)
+    private void ComputeDropTarget(Point posRoot)
+    {
+        if (_activeDoc is null) return;
+        var hit = HitTestTopmost(posRoot);
+        var host = FindBlockHost(hit);
+        ItemsControl hostIc = host ?? BlocksHost;
+        var coll = hostIc.ItemsSource as ObservableCollection<MacroBlock> ?? _activeDoc.Blocks;
+
+        int index = coll.Count;
+        double? y = null;
+        for (int i = 0; i < coll.Count; i++)
         {
-            if (i == from) continue;
-            if (_dragHost.ItemContainerGenerator.ContainerFromIndex(i) is not FrameworkElement c) continue;
-            double center = c.TranslatePoint(new Point(0, c.ActualHeight / 2), _dragHost).Y;
-            if (posInHost.Y > center) insert++;
-            else break;
+            if (hostIc.ItemContainerGenerator.ContainerFromIndex(i) is not FrameworkElement c) continue;
+            var top = c.TranslatePoint(new Point(0, 0), BlocksHost).Y;
+            if (posRoot.Y < top + c.ActualHeight / 2) { index = i; y = top; break; }
         }
 
-        if (insert != from) _dragCollection.Move(from, insert);
+        var htl = hostIc.TranslatePoint(new Point(0, 0), BlocksHost);
+        if (y is null)
+        {
+            if (coll.Count > 0 && hostIc.ItemContainerGenerator.ContainerFromIndex(coll.Count - 1) is FrameworkElement last)
+                y = last.TranslatePoint(new Point(0, 0), BlocksHost).Y + last.ActualHeight;
+            else
+                y = htl.Y + 4;
+        }
+
+        _dropColl = coll;
+        _dropIndex = index;
+        double x1 = htl.X + 4;
+        double x2 = htl.X + Math.Max(40, hostIc.ActualWidth) - 4;
+        _insAdorner?.Update(x1, x2, y.Value);
+    }
+
+    private void PerformDrop()
+    {
+        if (_activeDoc is null || _dropColl is null) return;
+
+        if (_dragKind == DragKind.NewBlock)
+        {
+            var nb = _newFactory?.Invoke();
+            if (nb is null) return;
+            _dropColl.Insert(Math.Clamp(_dropIndex, 0, _dropColl.Count), nb);
+        }
+        else if (_dragKind == DragKind.Move && _moveBlock != null)
+        {
+            if (IsInsideSubtree(_moveBlock, _dropColl)) return;   // 自分の中へは入れない
+            var oldColl = FindParentCollection(_moveBlock);
+            if (oldColl is null) return;
+            int oldIndex = oldColl.IndexOf(_moveBlock);
+            int idx = _dropIndex;
+            oldColl.RemoveAt(oldIndex);
+            if (ReferenceEquals(oldColl, _dropColl) && idx > oldIndex) idx--;
+            _dropColl.Insert(Math.Clamp(idx, 0, _dropColl.Count), _moveBlock);
+        }
+        UpdateEditorHints();
     }
 
     private void AutoScroll(MouseEventArgs e)
@@ -654,27 +714,84 @@ public partial class MainWindow : Window
 
     private void EndDrag()
     {
-        bool wasDragging = _dragging;
-        if (_ghost != null && _ghostLayer != null)
+        bool was = _dragging;
+        if (_adornerLayer != null)
         {
-            _ghostLayer.Remove(_ghost);
-            _ghost = null;
-            _ghostLayer = null;
+            if (_ghost != null) _adornerLayer.Remove(_ghost);
+            if (_insAdorner != null) _adornerLayer.Remove(_insAdorner);
         }
-        if (_dragContainer != null)
-        {
-            _dragContainer.Opacity = 1.0;
-            _dragContainer = null;
-        }
+        _ghost = null; _insAdorner = null; _adornerLayer = null;
+        if (_dimmed != null) { _dimmed.Opacity = 1.0; _dimmed = null; }
         if (BlocksHost.IsMouseCaptured) BlocksHost.ReleaseMouseCapture();
 
         _dragging = false;
         _dragArmed = false;
-        _dragBlock = null;
-        _dragHost = null;
-        _dragCollection = null;
+        _dragKind = DragKind.None;
+        _moveBlock = null;
+        _newFactory = null;
+        _srcElement = null;
+        _dropColl = null;
 
-        if (wasDragging) UpdatePreview();
+        if (was) UpdatePreview();
+    }
+
+    // ---- ヘルパ ----
+    private DependencyObject? HitTestTopmost(Point p)
+    {
+        DependencyObject? result = null;
+        VisualTreeHelper.HitTest(BlocksHost, null,
+            r => { result = r.VisualHit; return HitTestResultBehavior.Stop; },
+            new PointHitTestParameters(p));
+        return result;
+    }
+
+    private static ItemsControl? FindBlockHost(DependencyObject? src)
+    {
+        while (src != null)
+        {
+            if (src is ItemsControl ic && ic.ItemsSource is ObservableCollection<MacroBlock>) return ic;
+            src = VisualTreeHelper.GetParent(src);
+        }
+        return null;
+    }
+
+    private static FrameworkElement? FindBlockContainer(DependencyObject? src, MacroBlock block)
+    {
+        FrameworkElement? cand = null;
+        var d = src;
+        while (d != null)
+        {
+            if (d is FrameworkElement fe && ReferenceEquals(fe.DataContext, block)) cand = fe;
+            else if (cand != null) break;
+            d = VisualTreeHelper.GetParent(d);
+        }
+        return cand;
+    }
+
+    /// <summary>coll が block の子孫コレクションかどうか(循環防止)。</summary>
+    private static bool IsInsideSubtree(MacroBlock block, ObservableCollection<MacroBlock> coll)
+    {
+        bool Check(MacroBlock b)
+        {
+            if (b is IfBlock ib)
+            {
+                if (ReferenceEquals(ib.Children, coll) || ReferenceEquals(ib.ElseChildren, coll)) return true;
+                foreach (var br in ib.ElseIfs)
+                {
+                    if (ReferenceEquals(br.Children, coll)) return true;
+                    foreach (var c in br.Children) if (Check(c)) return true;
+                }
+                foreach (var c in ib.Children) if (Check(c)) return true;
+                foreach (var c in ib.ElseChildren) if (Check(c)) return true;
+            }
+            else if (b is ContainerBlock cb)
+            {
+                if (ReferenceEquals(cb.Children, coll)) return true;
+                foreach (var c in cb.Children) if (Check(c)) return true;
+            }
+            return false;
+        }
+        return Check(block);
     }
 
     private static MacroBlock? FindBlock(DependencyObject? src)
@@ -682,17 +799,6 @@ public partial class MainWindow : Window
         while (src != null)
         {
             if (src is FrameworkElement fe && fe.DataContext is MacroBlock b) return b;
-            src = VisualTreeHelper.GetParent(src);
-        }
-        return null;
-    }
-
-    /// <summary>visualツリーを上にたどり、最も近い ItemsControl(ブロックのホスト)を返す。</summary>
-    private static ItemsControl? FindItemsHost(DependencyObject? src)
-    {
-        while (src != null)
-        {
-            if (src is ItemsControl ic) return ic;
             src = VisualTreeHelper.GetParent(src);
         }
         return null;

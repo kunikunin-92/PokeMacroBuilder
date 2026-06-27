@@ -13,6 +13,18 @@
         <conv:DirectionSelectedConverter x:Key="DirSel"/>
         <BooleanToVisibilityConverter x:Key="B2V"/>
 
+        <!-- パレットのブロック(クリック=末尾追加 / ドラッグ=任意位置へ配置) -->
+        <Style x:Key="PaletteBlockButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Margin" Value="0,0,0,5"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="ToolTip" Value="クリックで末尾に追加 / ドラッグで好きな位置へ"/>
+            <EventSetter Event="PreviewMouseLeftButtonDown" Handler="PaletteBlock_Down"/>
+            <EventSetter Event="PreviewMouseMove" Handler="PaletteBlock_Move"/>
+            <EventSetter Event="Click" Handler="PaletteBlock_Click"/>
+        </Style>
+
         <!-- ===== タブ(編集中ファイル) ===== -->
         <DataTemplate x:Key="TabTemplate">
             <Border x:Name="tabBd" Background="{StaticResource ShellBgBrush}" Cursor="Hand"
@@ -377,15 +389,11 @@
                                 <ComboBoxItem Content="回数"/>
                                 <ComboBoxItem Content="条件の間"/>
                             </ComboBox>
-
-                            <!-- 回数 (LoopKind=1) -->
                             <StackPanel x:Name="countPanel" Orientation="Horizontal" Margin="8,0,0,0">
                                 <TextBox Width="56" Height="28" Margin="0,0,3,0" LostFocus="Field_LostFocus"
                                          Text="{Binding Count, UpdateSourceTrigger=LostFocus}"/>
                                 <TextBlock Text="回" Foreground="#FF3B2A00" VerticalAlignment="Center" FontWeight="Bold"/>
                             </StackPanel>
-
-                            <!-- 条件 (LoopKind=2) -->
                             <StackPanel x:Name="condPanel" Orientation="Horizontal" Margin="8,0,0,0" Visibility="Collapsed">
                                 <TextBox Width="80" Height="28" LostFocus="Field_LostFocus"
                                          Text="{Binding Condition.Var, UpdateSourceTrigger=LostFocus}"/>
@@ -397,9 +405,6 @@
                                 <TextBox Width="80" Height="28" LostFocus="Field_LostFocus"
                                          Text="{Binding Condition.Value, UpdateSourceTrigger=LostFocus}"/>
                             </StackPanel>
-
-                            <Button x:Name="tBtn" Content="&#x2295; ここに追加" Height="26" Margin="14,0,0,0" Padding="8,2"
-                                    Click="SetTargetHere_Click"/>
                         </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal">
                             <Button Content="&#x25B2;" Width="30" Height="26" Margin="0,0,3,0" Padding="0" ToolTip="上へ" Click="MoveUp_Click"/>
@@ -409,10 +414,7 @@
                     </Grid>
                     <Grid Margin="0,0,8,8">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="16"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                        <Border x:Name="body" Grid.Column="1" Background="#22000000" CornerRadius="4" MinHeight="34" Padding="8,6"
-                                BorderBrush="Transparent" BorderThickness="2">
-                            <ItemsControl ItemsSource="{Binding Children}"/>
-                        </Border>
+                        <ItemsControl Grid.Column="1" ItemsSource="{Binding Children}" Background="#22000000" MinHeight="36" Padding="8,6"/>
                     </Grid>
                 </StackPanel>
             </Border>
@@ -424,14 +426,10 @@
                     <Setter TargetName="countPanel" Property="Visibility" Value="Collapsed"/>
                     <Setter TargetName="condPanel" Property="Visibility" Value="Visible"/>
                 </DataTrigger>
-                <DataTrigger Binding="{Binding IsTarget}" Value="True">
-                    <Setter TargetName="body" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
-                    <Setter TargetName="tBtn" Property="Content" Value="&#x2713; 追加先"/>
-                </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
 
-        <!-- ===== もし〜なら(でなければ任意) ===== -->
+        <!-- ===== 条件分岐(if / else if / else) ===== -->
         <DataTemplate DataType="{x:Type models:IfBlock}">
             <Border Background="#FFE6A817" CornerRadius="5" Margin="0,0,0,3">
                 <StackPanel>
@@ -439,21 +437,17 @@
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#x2753;" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <TextBlock Text="もし:" FontWeight="Bold" Foreground="#FF3B2A00" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <TextBox Width="80" Height="28" LostFocus="Field_LostFocus"
+                            <TextBlock Text="条件分岐  もし" FontWeight="Bold" Foreground="#FF3B2A00" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBox Width="78" Height="28" LostFocus="Field_LostFocus"
                                      Text="{Binding Condition.Var, UpdateSourceTrigger=LostFocus}"/>
-                            <ComboBox Width="58" Height="28" Margin="4,0" SelectedIndex="{Binding Condition.Op, Mode=TwoWay}"
+                            <ComboBox Width="56" Height="28" Margin="4,0" SelectedIndex="{Binding Condition.Op, Mode=TwoWay}"
                                       SelectionChanged="Field_SelectionChanged">
                                 <ComboBoxItem Content="="/><ComboBoxItem Content="&#x2260;"/><ComboBoxItem Content="&lt;"/>
                                 <ComboBoxItem Content="&#x2264;"/><ComboBoxItem Content="&gt;"/><ComboBoxItem Content="&#x2265;"/>
                             </ComboBox>
-                            <TextBox Width="80" Height="28" LostFocus="Field_LostFocus"
+                            <TextBox Width="78" Height="28" LostFocus="Field_LostFocus"
                                      Text="{Binding Condition.Value, UpdateSourceTrigger=LostFocus}"/>
-                            <TextBlock Text="なら" FontWeight="Bold" Foreground="#FF3B2A00" VerticalAlignment="Center" Margin="6,0,0,0"/>
-                            <Button x:Name="tBtn" Content="&#x2295; ここに追加" Height="26" Margin="14,0,0,0" Padding="8,2"
-                                    Click="SetTargetHere_Click"/>
-                            <Button Content="でなければ &#xB1;" Height="26" Margin="6,0,0,0" Padding="8,2"
-                                    ToolTip="else を切り替え" Click="IfElseToggle_Click"/>
+                            <TextBlock Text="なら↓" FontWeight="Bold" Foreground="#FF3B2A00" VerticalAlignment="Center" Margin="6,0,0,0"/>
                         </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal">
                             <Button Content="&#x25B2;" Width="30" Height="26" Margin="0,0,3,0" Padding="0" ToolTip="上へ" Click="MoveUp_Click"/>
@@ -461,30 +455,59 @@
                             <Button Content="&#x2715;" Width="30" Height="26" Padding="0" ToolTip="削除" Click="DeleteBlock_Click"/>
                         </StackPanel>
                     </Grid>
-                    <Grid Margin="0,0,8,4">
+
+                    <!-- then 本文 -->
+                    <Grid Margin="0,0,8,6">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="16"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                        <Border x:Name="body" Grid.Column="1" Background="#22000000" CornerRadius="4" MinHeight="34" Padding="8,6"
-                                BorderBrush="Transparent" BorderThickness="2">
-                            <ItemsControl ItemsSource="{Binding Children}"/>
-                        </Border>
+                        <ItemsControl Grid.Column="1" ItemsSource="{Binding Children}" Background="#22000000" MinHeight="36" Padding="8,6"/>
                     </Grid>
+
+                    <!-- でなければもし(elif) 分岐 -->
+                    <ItemsControl ItemsSource="{Binding ElseIfs}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Margin="0,0,0,2">
+                                    <StackPanel Orientation="Horizontal" Margin="12,2,0,2">
+                                        <TextBlock Text="でなければもし" FontWeight="Bold" Foreground="#FF3B2A00" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                        <TextBox Width="78" Height="28" LostFocus="Field_LostFocus"
+                                                 Text="{Binding Condition.Var, UpdateSourceTrigger=LostFocus}"/>
+                                        <ComboBox Width="56" Height="28" Margin="4,0" SelectedIndex="{Binding Condition.Op, Mode=TwoWay}"
+                                                  SelectionChanged="Field_SelectionChanged">
+                                            <ComboBoxItem Content="="/><ComboBoxItem Content="&#x2260;"/><ComboBoxItem Content="&lt;"/>
+                                            <ComboBoxItem Content="&#x2264;"/><ComboBoxItem Content="&gt;"/><ComboBoxItem Content="&#x2265;"/>
+                                        </ComboBox>
+                                        <TextBox Width="78" Height="28" LostFocus="Field_LostFocus"
+                                                 Text="{Binding Condition.Value, UpdateSourceTrigger=LostFocus}"/>
+                                        <TextBlock Text="なら↓" FontWeight="Bold" Foreground="#FF3B2A00" VerticalAlignment="Center" Margin="6,0,8,0"/>
+                                        <Button Content="&#x2715;" Width="26" Height="26" Padding="0" ToolTip="この分岐を削除" Click="RemoveElseIf_Click"/>
+                                    </StackPanel>
+                                    <Grid Margin="0,0,8,2">
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="16"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                        <ItemsControl Grid.Column="1" ItemsSource="{Binding Children}" Background="#22000000" MinHeight="36" Padding="8,6"/>
+                                    </Grid>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- でなければ(else) 本文 -->
                     <StackPanel Visibility="{Binding HasElse, Converter={StaticResource B2V}}">
-                        <TextBlock Text="でなければ" FontWeight="Bold" Foreground="#FF3B2A00" Margin="14,0,0,2"/>
-                        <Grid Margin="0,0,8,8">
+                        <TextBlock Text="でなければ↓" FontWeight="Bold" Foreground="#FF3B2A00" Margin="12,2,0,2"/>
+                        <Grid Margin="0,0,8,2">
                             <Grid.ColumnDefinitions><ColumnDefinition Width="16"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                            <Border Grid.Column="1" Background="#22000000" CornerRadius="4" MinHeight="34" Padding="8,6">
-                                <ItemsControl ItemsSource="{Binding ElseChildren}"/>
-                            </Border>
+                            <ItemsControl Grid.Column="1" ItemsSource="{Binding ElseChildren}" Background="#22000000" MinHeight="36" Padding="8,6"/>
                         </Grid>
+                    </StackPanel>
+
+                    <!-- オプション追加ボタン -->
+                    <StackPanel Orientation="Horizontal" Margin="12,2,0,8">
+                        <Button Content="&#x2795; でなければもし" Height="26" Padding="8,2" Margin="0,0,6,0"
+                                ToolTip="else if 分岐を追加" Click="AddElseIf_Click"/>
+                        <Button Content="&#x2795; でなければ (else)" Height="26" Padding="8,2"
+                                ToolTip="else を追加 / 解除" Click="IfElseToggle_Click"/>
                     </StackPanel>
                 </StackPanel>
             </Border>
-            <DataTemplate.Triggers>
-                <DataTrigger Binding="{Binding IsTarget}" Value="True">
-                    <Setter TargetName="body" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
-                    <Setter TargetName="tBtn" Property="Content" Value="&#x2713; 追加先"/>
-                </DataTrigger>
-            </DataTemplate.Triggers>
         </DataTemplate>
     </Window.Resources>
 
@@ -684,12 +707,13 @@
                     </StackPanel>
                 </Border>
 
-                <!-- 本体: パレット | スクリプト | プレビュー -->
+                <!-- 本体: パレット | スクリプト | スプリッタ | プレビュー -->
                 <Grid Grid.Row="1">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="230"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="380"/>
+                        <ColumnDefinition Width="230" MinWidth="180"/>
+                        <ColumnDefinition Width="*" MinWidth="260"/>
+                        <ColumnDefinition Width="6"/>
+                        <ColumnDefinition Width="380" MinWidth="220"/>
                     </Grid.ColumnDefinitions>
 
                     <!-- パレット -->
@@ -699,47 +723,34 @@
                         <StackPanel Margin="12">
                             <TextBlock Text="ツールボックス" FontWeight="SemiBold" FontSize="13" Margin="2,2,0,8"/>
 
-                            <!-- 追加先 -->
-                            <Border Background="{StaticResource EditorBgBrush}" CornerRadius="3" Padding="8,6" Margin="0,0,0,10"
-                                    BorderBrush="{StaticResource BorderStrongBrush}" BorderThickness="1">
-                                <StackPanel>
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="追加先: " Foreground="{StaticResource TextDimBrush}" VerticalAlignment="Center"/>
-                                        <TextBlock x:Name="TargetLabel" Text="ルート" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                    <Button Content="ルートに戻す" Height="24" Margin="0,6,0,0" Padding="6,1" FontSize="11"
-                                            HorizontalAlignment="Left" Click="ResetTarget_Click"/>
-                                </StackPanel>
-                            </Border>
-
                             <TextBlock Text="入力" Foreground="{StaticResource TextDimBrush}" FontSize="11" Margin="2,0,0,4"/>
-                            <Button Margin="0,0,0,5" Height="34" HorizontalContentAlignment="Left" Background="#FF4C97FF" BorderBrush="#FF3B7DDB" Click="AddPress_Click">
+                            <Button Style="{StaticResource PaletteBlockButton}" Tag="press" Background="#FF4C97FF" BorderBrush="#FF3B7DDB">
                                 <StackPanel Orientation="Horizontal"><TextBlock Text="&#x1F3AE;" Margin="2,0,8,0"/><TextBlock Text="ボタンを押す" FontWeight="Bold" Foreground="White"/></StackPanel></Button>
-                            <Button Margin="0,0,0,5" Height="34" HorizontalContentAlignment="Left" Background="#FF9966FF" BorderBrush="#FF7A4DDB" Click="AddStick_Click">
+                            <Button Style="{StaticResource PaletteBlockButton}" Tag="stick" Background="#FF9966FF" BorderBrush="#FF7A4DDB">
                                 <StackPanel Orientation="Horizontal"><TextBlock Text="&#x1F579;" Margin="2,0,8,0"/><TextBlock Text="スティック / 方向" FontWeight="Bold" Foreground="White"/></StackPanel></Button>
-                            <Button Margin="0,0,0,10" Height="34" HorizontalContentAlignment="Left" Background="#FFFFAB19" BorderBrush="#FFD98E0F" Click="AddWait_Click">
+                            <Button Style="{StaticResource PaletteBlockButton}" Tag="wait" Margin="0,0,0,10" Background="#FFFFAB19" BorderBrush="#FFD98E0F">
                                 <StackPanel Orientation="Horizontal"><TextBlock Text="&#x23F1;" Margin="2,0,8,0"/><TextBlock Text="待機する" FontWeight="Bold" Foreground="#FF3B2A00"/></StackPanel></Button>
 
                             <TextBlock Text="制御フロー" Foreground="{StaticResource TextDimBrush}" FontSize="11" Margin="2,0,0,4"/>
-                            <Button Margin="0,0,0,5" Height="34" HorizontalContentAlignment="Left" Background="#FFE6A817" BorderBrush="#FFC78F0E" Click="AddIf_Click">
-                                <StackPanel Orientation="Horizontal"><TextBlock Text="&#x2753;" Margin="2,0,8,0"/><TextBlock Text="もし〜なら" FontWeight="Bold" Foreground="#FF3B2A00"/></StackPanel></Button>
-                            <Button Margin="0,0,0,10" Height="34" HorizontalContentAlignment="Left" Background="#FFE6A817" BorderBrush="#FFC78F0E" Click="AddLoop_Click">
+                            <Button Style="{StaticResource PaletteBlockButton}" Tag="if" Background="#FFE6A817" BorderBrush="#FFC78F0E">
+                                <StackPanel Orientation="Horizontal"><TextBlock Text="&#x2753;" Margin="2,0,8,0"/><TextBlock Text="条件分岐 (if)" FontWeight="Bold" Foreground="#FF3B2A00"/></StackPanel></Button>
+                            <Button Style="{StaticResource PaletteBlockButton}" Tag="loop" Margin="0,0,0,10" Background="#FFE6A817" BorderBrush="#FFC78F0E">
                                 <StackPanel Orientation="Horizontal"><TextBlock Text="&#x1F501;" Margin="2,0,8,0"/><TextBlock Text="ループ (ずっと/回数/条件)" FontWeight="Bold" Foreground="#FF3B2A00"/></StackPanel></Button>
 
                             <TextBlock Text="データ・通知" Foreground="{StaticResource TextDimBrush}" FontSize="11" Margin="2,0,0,4"/>
-                            <Button Margin="0,0,0,5" Height="34" HorizontalContentAlignment="Left" Background="#FFFF8C1A" BorderBrush="#FFD9750E" Click="AddVariable_Click">
+                            <Button Style="{StaticResource PaletteBlockButton}" Tag="var" Background="#FFFF8C1A" BorderBrush="#FFD9750E">
                                 <StackPanel Orientation="Horizontal"><TextBlock Text="&#x1F516;" Margin="2,0,8,0"/><TextBlock Text="変数" FontWeight="Bold" Foreground="White"/></StackPanel></Button>
-                            <Button Margin="0,0,0,5" Height="34" HorizontalContentAlignment="Left" Background="#FF5CB1D6" BorderBrush="#FF3E93B8" Click="AddLog_Click">
+                            <Button Style="{StaticResource PaletteBlockButton}" Tag="log" Background="#FF5CB1D6" BorderBrush="#FF3E93B8">
                                 <StackPanel Orientation="Horizontal"><TextBlock Text="&#x1F4DD;" Margin="2,0,8,0"/><TextBlock Text="ログ出力" FontWeight="Bold" Foreground="#FF06384B"/></StackPanel></Button>
-                            <Button Margin="0,0,0,5" Height="34" HorizontalContentAlignment="Left" Background="#FFCF63B4" BorderBrush="#FFAE4895" Click="AddNotify_Click">
+                            <Button Style="{StaticResource PaletteBlockButton}" Tag="notify" Background="#FFCF63B4" BorderBrush="#FFAE4895">
                                 <StackPanel Orientation="Horizontal"><TextBlock Text="&#x1F4E2;" Margin="2,0,8,0"/><TextBlock Text="通知 (LINE/Discord)" FontWeight="Bold" Foreground="White"/></StackPanel></Button>
-                            <Button Margin="0,0,0,10" Height="34" HorizontalContentAlignment="Left" Background="#FF12A89D" BorderBrush="#FF0C857C" Click="AddScreenshot_Click">
+                            <Button Style="{StaticResource PaletteBlockButton}" Tag="screenshot" Margin="0,0,0,10" Background="#FF12A89D" BorderBrush="#FF0C857C">
                                 <StackPanel Orientation="Horizontal"><TextBlock Text="&#x1F4F7;" Margin="2,0,8,0"/><TextBlock Text="スクショ保存" FontWeight="Bold" Foreground="White"/></StackPanel></Button>
 
                             <Border Background="{StaticResource EditorBgBrush}" CornerRadius="3" Padding="10" Margin="0,2,0,0"
                                     BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
                                 <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource TextDimBrush}"
-                                           Text="制御ブロックの『⊕ ここに追加』を押すと、その中が追加先になります。並べ替えは同じ枠内でドラッグ/▲▼。"/>
+                                           Text="ブロックを右のスクリプトへドラッグして配置。青い線が入る位置に入ります。ループ/条件分岐の枠の中にも入れられます。既存ブロックもドラッグで移動できます。"/>
                             </Border>
                         </StackPanel>
                         </ScrollViewer>
@@ -765,8 +776,13 @@
                         </StackPanel>
                     </ScrollViewer>
 
+                    <!-- スプリッタ(ブロック⇔プレビューの境界をドラッグでリサイズ) -->
+                    <GridSplitter Grid.Column="2" Width="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                                  Background="{StaticResource BorderStrongBrush}" Cursor="SizeWE"
+                                  ResizeBehavior="PreviousAndNext" ResizeDirection="Columns"/>
+
                     <!-- プレビュー -->
-                    <Border Grid.Column="2" Background="{StaticResource PanelBgBrush}"
+                    <Border Grid.Column="3" Background="{StaticResource PanelBgBrush}"
                             BorderBrush="{StaticResource BorderBrush}" BorderThickness="1,0,0,0">
                         <Grid Margin="12">
                             <Grid.RowDefinitions>

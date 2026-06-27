@@ -26,10 +26,13 @@ public abstract class MacroBlock : INotifyPropertyChanged
 public abstract class ContainerBlock : MacroBlock
 {
     public ObservableCollection<MacroBlock> Children { get; } = new();
+}
 
-    private bool _isTarget;
-    /// <summary>「追加先」として選択されているか。</summary>
-    public bool IsTarget { get => _isTarget; set => Set(ref _isTarget, value); }
+/// <summary>条件分岐の「でなければもし(elif)」1分岐。</summary>
+public sealed class ElseIfBranch
+{
+    public Condition Condition { get; } = new();
+    public ObservableCollection<MacroBlock> Children { get; } = new();
 }
 
 // ============================================================
@@ -149,13 +152,22 @@ public sealed class LoopBlock : ContainerBlock
 
 public sealed class IfBlock : ContainerBlock
 {
-    public override string Kind => "もし〜なら";
+    public override string Kind => "条件分岐";
+
+    /// <summary>最初の「もし」の条件。Children が その本文(then)。</summary>
     public Condition Condition { get; } = new();
 
+    /// <summary>「でなければもし(elif)」分岐の列。</summary>
+    public ObservableCollection<ElseIfBranch> ElseIfs { get; } = new();
+
+    /// <summary>「でなければ(else)」の本文。</summary>
     public ObservableCollection<MacroBlock> ElseChildren { get; } = new();
 
     private bool _hasElse;
     public bool HasElse { get => _hasElse; set => Set(ref _hasElse, value); }
+
+    public void AddElseIf() => ElseIfs.Add(new ElseIfBranch());
+    public void RemoveElseIf(ElseIfBranch b) => ElseIfs.Remove(b);
 }
 
 // ============================================================

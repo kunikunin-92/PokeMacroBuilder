@@ -41,6 +41,7 @@ internal sealed class BlockDto
     public bool HasElse { get; set; }
     public List<BlockDto>? Children { get; set; }
     public List<BlockDto>? ElseChildren { get; set; }
+    public List<ElseIfDto>? ElseIfs { get; set; }
     // 変数・通知
     public string VarName { get; set; } = "cnt";
     public int VarOp { get; set; }
@@ -48,6 +49,14 @@ internal sealed class BlockDto
     public int Channel { get; set; }
     public string Text { get; set; } = "";
     public string Name { get; set; } = "";
+}
+
+internal sealed class ElseIfDto
+{
+    public string CondVar { get; set; } = "cnt";
+    public int CondOp { get; set; }
+    public string CondValue { get; set; } = "0";
+    public List<BlockDto> Children { get; set; } = new();
 }
 
 /// <summary>
@@ -147,6 +156,11 @@ public static class MacroSerializer
                     HasElse = ib.HasElse,
                     Children = ib.Children.Select(BuildBlock).ToList(),
                     ElseChildren = ib.ElseChildren.Select(BuildBlock).ToList(),
+                    ElseIfs = ib.ElseIfs.Select(br => new ElseIfDto
+                    {
+                        CondVar = br.Condition.Var, CondOp = br.Condition.Op, CondValue = br.Condition.Value,
+                        Children = br.Children.Select(BuildBlock).ToList(),
+                    }).ToList(),
                 };
             case VariableBlock v:
                 return new BlockDto { Kind = "var", VarName = v.Name, VarOp = v.Op, VarValue = v.Value };
@@ -214,6 +228,14 @@ public static class MacroSerializer
                 ifb.Condition.Var = b.CondVar; ifb.Condition.Op = b.CondOp; ifb.Condition.Value = b.CondValue;
                 Fill(ifb.Children, b.Children);
                 Fill(ifb.ElseChildren, b.ElseChildren);
+                if (b.ElseIfs != null)
+                    foreach (var ed in b.ElseIfs)
+                    {
+                        var br = new ElseIfBranch();
+                        br.Condition.Var = ed.CondVar; br.Condition.Op = ed.CondOp; br.Condition.Value = ed.CondValue;
+                        Fill(br.Children, ed.Children);
+                        ifb.ElseIfs.Add(br);
+                    }
                 return ifb;
             case "var":
                 return new VariableBlock { Name = b.VarName, Op = b.VarOp is >= 0 and <= 6 ? b.VarOp : 0, Value = b.VarValue };

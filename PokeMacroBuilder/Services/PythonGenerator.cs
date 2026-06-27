@@ -148,6 +148,11 @@ public static class PythonGenerator
                 case IfBlock ib:
                     outp.Add((rel, $"if {Cond(ib.Condition)}:"));
                     EmitBody(ib.Children, rel + 1, outp);
+                    foreach (var br in ib.ElseIfs)
+                    {
+                        outp.Add((rel, $"elif {Cond(br.Condition)}:"));
+                        EmitBody(br.Children, rel + 1, outp);
+                    }
                     if (ib.HasElse)
                     {
                         outp.Add((rel, "else:"));
@@ -251,7 +256,10 @@ public static class PythonGenerator
             {
                 case VariableBlock v: Add(SanitizeVar(v.Name)); break;
                 case LoopBlock l when l.LoopKind == 2: Add(SanitizeVar(l.Condition.Var)); break;
-                case IfBlock i: Add(SanitizeVar(i.Condition.Var)); break;
+                case IfBlock i:
+                    Add(SanitizeVar(i.Condition.Var));
+                    foreach (var br in i.ElseIfs) Add(SanitizeVar(br.Condition.Var));
+                    break;
             }
         }
         return set;
@@ -266,6 +274,8 @@ public static class PythonGenerator
             if (b is IfBlock ib)
             {
                 foreach (var c in AllBlocks(ib.Children)) yield return c;
+                foreach (var br in ib.ElseIfs)
+                    foreach (var c in AllBlocks(br.Children)) yield return c;
                 foreach (var c in AllBlocks(ib.ElseChildren)) yield return c;
             }
             else if (b is ContainerBlock cb)
