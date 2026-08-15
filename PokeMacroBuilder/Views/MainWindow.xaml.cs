@@ -5,6 +5,7 @@ using System.Collections.Specialized;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -235,10 +236,25 @@ public partial class MainWindow : Window
     private bool HasValidTesseract => SettingsWindow.IsValid(_settings.TesseractPath);
 
     private void MenuExit_Click(object sender, RoutedEventArgs e) => Close();
+
+    /// <summary>アセンブリに埋め込まれたバージョン("1.0.0" 形式)。</summary>
+    public static string AppVersion
+    {
+        get
+        {
+            var asm = Assembly.GetExecutingAssembly();
+            // ビルド時に "1.0.0+<コミットハッシュ>" になることがあるので後半を落とす
+            var info = asm.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+            if (!string.IsNullOrWhiteSpace(info)) return info.Split('+')[0];
+            return asm.GetName().Version?.ToString(3) ?? "1.0.0";
+        }
+    }
+
     private void MenuAbout_Click(object sender, RoutedEventArgs e)
     {
         MessageBox.Show(this,
-            "PokeMacro Builder\nブロックで pokecon マクロを作成するツール\n\n© 2026",
+            $"PokeMacro Builder\nバージョン {AppVersion}\n\n" +
+            "ブロックで pokecon マクロを作成するツール\n\n© 2026 kunikunin-92",
             "バージョン情報", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
