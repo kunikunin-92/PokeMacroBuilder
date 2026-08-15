@@ -91,6 +91,7 @@ public sealed class MacroStore
 
             doc.FileName = Path.GetFileName(path);
             doc.FilePath = path;
+            doc.SavedSnapshot = MacroSerializer.ToBase64(doc);
             list.Add(new MacroEntry(doc.DisplayName, doc.FileName!, path, doc));
         }
 
@@ -123,6 +124,7 @@ public sealed class MacroStore
         var code = PythonGenerator.Generate(doc, doc.FileName!);
         File.WriteAllText(path, code, new UTF8Encoding(false));
         doc.FilePath = path;
+        doc.SavedSnapshot = MacroSerializer.ToBase64(doc);
     }
 
     public void Delete(MacroEntry entry)
@@ -199,6 +201,24 @@ public sealed class MacroStore
     public void DeleteImage(MacroDocument doc, TemplateImage img)
     {
         if (File.Exists(img.FullPath)) File.Delete(img.FullPath);
+    }
+
+    /// <summary>
+    /// テンプレ画像フォルダを別のマクロへ複製する(コピー保存用)。
+    /// 複製先の参照は "&lt;新stem&gt;/&lt;同じファイル名&gt;" になる。
+    /// </summary>
+    public void CopyImages(MacroDocument from, MacroDocument to)
+    {
+        var src = MacroTemplateDir(from);
+        var dst = MacroTemplateDir(to);
+        if (src is null || dst is null || !Directory.Exists(src)) return;
+
+        Directory.CreateDirectory(dst);
+        foreach (var f in Directory.EnumerateFiles(src)
+                     .Where(f => ImageExts.Contains(Path.GetExtension(f).ToLowerInvariant())))
+        {
+            File.Copy(f, Path.Combine(dst, Path.GetFileName(f)), overwrite: true);
+        }
     }
 }
 

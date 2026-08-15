@@ -41,6 +41,12 @@ public sealed class MacroDocument : INotifyPropertyChanged
     /// <summary>保存済みファイルの絶対パス(未保存なら null)。</summary>
     public string? FilePath { get; set; }
 
+    /// <summary>
+    /// 最後に保存/読み込みした時点の内容(MacroSerializer のBase64)。
+    /// 現在の内容と比較して「未保存の変更があるか」を判定する。未保存の新規なら null。
+    /// </summary>
+    public string? SavedSnapshot { get; set; }
+
     public LoopMode Loop { get; set; } = LoopMode.None;
 
     public int LoopCount { get; set; } = 1;

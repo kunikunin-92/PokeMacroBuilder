@@ -60,7 +60,12 @@ public sealed class Condition : INotifyPropertyChanged
     // --- 画像認識用 ---
     /// <summary>テンプレ画像の相対参照 (例: macro1/img1.png)。</summary>
     private string _imageRef = "";
-    public string ImageRef { get => _imageRef; set { if (_imageRef != value) { _imageRef = value; On(); } } }
+    public string ImageRef
+    {
+        get => _imageRef;
+        // ComboBox の選択が外れると null が入るため、空文字に正規化しておく
+        set { var v = value ?? ""; if (_imageRef != v) { _imageRef = v; On(); } }
+    }
 
     /// <summary>一致率(0.0〜1.0)。</summary>
     private double _threshold = 0.8;

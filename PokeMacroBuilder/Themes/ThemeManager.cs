@@ -46,7 +46,11 @@ public static class ThemeManager
 
     public static void Apply(string? theme)
     {
-        var map = theme == "Light" ? Light : Dark;
+        bool light = theme == "Light";
+        // プレビューの構文ハイライトも同じテーマに揃える
+        Services.PythonHighlighter.IsLightTheme = light;
+
+        var map = light ? Light : Dark;
         var res = Application.Current?.Resources;
         if (res is null) return;
 

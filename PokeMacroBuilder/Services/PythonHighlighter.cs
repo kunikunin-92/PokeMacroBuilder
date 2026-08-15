@@ -7,19 +7,54 @@ using System.Windows.Media;
 namespace PokeMacroBuilder.Services;
 
 /// <summary>
-/// 生成済み Python コードを VSCode(Dark+)風に色付けした FlowDocument に変換する簡易ハイライタ。
+/// 生成済み Python コードを VSCode 風に色付けした FlowDocument に変換する簡易ハイライタ。
+/// テーマに合わせて配色を切り替える(暗い配色のままだと Light テーマで文字が読めないため)。
 /// </summary>
 public static class PythonHighlighter
 {
+    /// <summary>1テーマ分の配色。</summary>
+    private sealed class Palette
+    {
+        public required Brush Comment { get; init; }
+        public required Brush String { get; init; }
+        public required Brush Number { get; init; }
+        public required Brush Keyword { get; init; }  // 制御系 from/import/while...
+        public required Brush Decl { get; init; }     // class/def/self/True...
+        public required Brush Type { get; init; }     // Button/Direction...
+        public required Brush Func { get; init; }     // 関数呼び出し
+        public required Brush Default { get; init; }
+    }
+
     // VSCode Dark+ 配色
-    private static readonly Brush ColComment = Frozen("#6A9955");
-    private static readonly Brush ColString = Frozen("#CE9178");
-    private static readonly Brush ColNumber = Frozen("#B5CEA8");
-    private static readonly Brush ColKeyword = Frozen("#C586C0"); // 制御系 from/import/while...
-    private static readonly Brush ColDecl = Frozen("#569CD6");    // class/def/self/True...
-    private static readonly Brush ColType = Frozen("#4EC9B0");    // Button/Direction...
-    private static readonly Brush ColFunc = Frozen("#DCDCAA");    // 関数呼び出し
-    private static readonly Brush ColDefault = Frozen("#D4D4D4");
+    private static readonly Palette DarkPalette = new()
+    {
+        Comment = Frozen("#6A9955"),
+        String = Frozen("#CE9178"),
+        Number = Frozen("#B5CEA8"),
+        Keyword = Frozen("#C586C0"),
+        Decl = Frozen("#569CD6"),
+        Type = Frozen("#4EC9B0"),
+        Func = Frozen("#DCDCAA"),
+        Default = Frozen("#D4D4D4"),
+    };
+
+    // VSCode Light+ 配色
+    private static readonly Palette LightPalette = new()
+    {
+        Comment = Frozen("#008000"),
+        String = Frozen("#A31515"),
+        Number = Frozen("#098658"),
+        Keyword = Frozen("#AF00DB"),
+        Decl = Frozen("#0000FF"),
+        Type = Frozen("#267F99"),
+        Func = Frozen("#795E26"),
+        Default = Frozen("#1E1E1E"),
+    };
+
+    /// <summary>Light テーマ用の配色を使うか(ThemeManager から設定される)。</summary>
+    public static bool IsLightTheme { get; set; }
+
+    private static Palette Current => IsLightTheme ? LightPalette : DarkPalette;
 
     private static readonly HashSet<string> ControlKeywords = new()
     {
@@ -45,6 +80,7 @@ public static class PythonHighlighter
 
     public static FlowDocument BuildDocument(string code)
     {
+        var pal = Current;
         var para = new Paragraph
         {
             Margin = new Thickness(0),
@@ -54,7 +90,7 @@ public static class PythonHighlighter
         var lines = (code ?? string.Empty).Replace("\r\n", "\n").Split('\n');
         for (int li = 0; li < lines.Length; li++)
         {
-            AppendLine(para, lines[li]);
+            AppendLine(para, lines[li], pal);
             if (li < lines.Length - 1) para.Inlines.Add(new LineBreak());
         }
 
@@ -62,14 +98,14 @@ public static class PythonHighlighter
         {
             FontFamily = new FontFamily("Cascadia Mono, Consolas, Courier New"),
             FontSize = 12.5,
-            Foreground = ColDefault,
+            Foreground = pal.Default,
             PagePadding = new Thickness(2),
             PageWidth = 2000, // 折り返し防止
         };
         return doc;
     }
 
-    private static void AppendLine(Paragraph para, string line)
+    private static void AppendLine(Paragraph para, string line, Palette pal)
     {
         int i = 0;
         int n = line.Length;
@@ -80,7 +116,7 @@ public static class PythonHighlighter
             // コメント
             if (c == '#')
             {
-                Add(para, line.Substring(i), ColComment);
+                Add(para, line.Substring(i), pal.Comment);
                 return;
             }
 
@@ -96,7 +132,7 @@ public static class PythonHighlighter
                     if (line[i] == q) { i++; break; }
                     i++;
                 }
-                Add(para, line.Substring(start, i - start), ColString);
+                Add(para, line.Substring(start, i - start), pal.String);
                 continue;
             }
 
@@ -105,7 +141,7 @@ public static class PythonHighlighter
             {
                 int start = i;
                 while (i < n && (char.IsDigit(line[i]) || line[i] == '.')) i++;
-                Add(para, line.Substring(start, i - start), ColNumber);
+                Add(para, line.Substring(start, i - start), pal.Number);
                 continue;
             }
 
@@ -119,11 +155,11 @@ public static class PythonHighlighter
                 bool followedByParen = i < n && SkipSpaces(line, i) is int j && j < n && line[j] == '(';
 
                 Brush brush;
-                if (ControlKeywords.Contains(word)) brush = ColKeyword;
-                else if (DeclKeywords.Contains(word)) brush = ColDecl;
-                else if (TypeNames.Contains(word)) brush = ColType;
-                else if (followedByParen) brush = ColFunc;
-                else brush = ColDefault;
+                if (ControlKeywords.Contains(word)) brush = pal.Keyword;
+                else if (DeclKeywords.Contains(word)) brush = pal.Decl;
+                else if (TypeNames.Contains(word)) brush = pal.Type;
+                else if (followedByParen) brush = pal.Func;
+                else brush = pal.Default;
 
                 Add(para, word, brush);
                 continue;
@@ -138,7 +174,7 @@ public static class PythonHighlighter
                     if (d == '#' || d == '\'' || d == '"' || char.IsLetterOrDigit(d) || d == '_') break;
                     i++;
                 }
-                Add(para, line.Substring(start, i - start), ColDefault);
+                Add(para, line.Substring(start, i - start), pal.Default);
             }
         }
     }

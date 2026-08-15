@@ -136,12 +136,20 @@ public partial class MainWindow : Window
         ActivateDoc(doc);
     }
 
+    /// <summary>保存後に変更されている(= 閉じると失われる)か。</summary>
+    private bool IsDirty(MacroDocument doc)
+    {
+        if (ReferenceEquals(doc, _activeDoc)) SyncToDoc();
+        if (doc.SavedSnapshot is null) return doc.Blocks.Count > 0;   // 未保存の新規
+        return MacroSerializer.ToBase64(doc) != doc.SavedSnapshot;
+    }
+
     private void CloseDoc(MacroDocument doc)
     {
-        if (!doc.IsSaved && doc.Blocks.Count > 0)
+        if (IsDirty(doc))
         {
             var ans = MessageBox.Show(this,
-                $"「{doc.DisplayName}」は保存されていません。閉じますか?",
+                $"「{doc.DisplayName}」の変更は保存されていません。破棄して閉じますか?",
                 "確認", MessageBoxButton.YesNo, MessageBoxImage.Warning);
             if (ans != MessageBoxResult.Yes) return;
         }
@@ -201,19 +209,42 @@ public partial class MainWindow : Window
     {
         if (_store is null || _activeDoc is null) return;
         SyncToDoc();
-        var copy = MacroSerializer.Clone(_activeDoc);
-        copy.DisplayName = _activeDoc.DisplayName + " のコピー";
-        OpenDoc(copy);
-        // 直ちにファイル化
-        try { _store.Save(copy); }
+
+        var source = _activeDoc;
+        var copy = MacroSerializer.Clone(source);
+        copy.DisplayName = source.DisplayName + " のコピー";
+
+        // タブとして開く前にファイル化しておく。
+        // (先に開くと、まだ画像フォルダが無い状態で画像一覧が作られ、
+        //  条件の画像選択が外れてしまう)
+        try
+        {
+            _store.Save(copy);                       // ファイル名を確定
+            _store.CopyImages(source, copy);         // テンプレ画像も複製
+            RetargetImageRefs(copy, _store.MacroStem(source), _store.MacroStem(copy));
+            _store.Save(copy);                       // 参照を書き換えた状態で保存し直す
+        }
         catch (Exception ex)
         {
             MessageBox.Show(this, "コピーの保存に失敗しました:\n" + ex.Message, "エラー",
                 MessageBoxButton.OK, MessageBoxImage.Error);
             return;
         }
+
+        OpenDoc(copy);
         AfterSaved(copy);
     }
+
+    /// <summary>画像参照の「マクロ名/」部分をコピー先のものに付け替える。</summary>
+    private static void RetargetImageRefs(MacroDocument doc, string? oldStem, string? newStem)
+    {
+        if (string.IsNullOrEmpty(oldStem) || string.IsNullOrEmpty(newStem) || oldStem == newStem) return;
+        var prefix = oldStem + "/";
+        foreach (var c in AllConditions(doc))
+            if (c.ImageRef.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                c.ImageRef = newStem + "/" + c.ImageRef.Substring(prefix.Length);
+    }
+
     private void MenuHome_Click(object sender, RoutedEventArgs e) => ActivateHome();
     private void MenuRefresh_Click(object sender, RoutedEventArgs e)
     {
@@ -304,6 +335,7 @@ public partial class MainWindow : Window
             }
             doc.FileName = Path.GetFileName(path);
             doc.FilePath = path;
+            doc.SavedSnapshot = MacroSerializer.ToBase64(doc);
             return doc;
         }
         catch (Exception ex)
@@ -312,6 +344,20 @@ public partial class MainWindow : Window
                 MessageBoxButton.OK, MessageBoxImage.Error);
             return null;
         }
+    }
+
+    protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+    {
+        var dirty = _openDocs.Where(IsDirty).ToList();
+        if (dirty.Count > 0)
+        {
+            var names = string.Join("\n", dirty.Select(d => "・" + d.DisplayName));
+            var ans = MessageBox.Show(this,
+                $"次のマクロに未保存の変更があります:\n{names}\n\n破棄して終了しますか?",
+                "終了の確認", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (ans != MessageBoxResult.Yes) { e.Cancel = true; return; }
+        }
+        base.OnClosing(e);
     }
 
     protected override void OnPreviewKeyDown(KeyEventArgs e)
@@ -491,7 +537,12 @@ public partial class MainWindow : Window
     /// <summary>条件の種別変更。文字(OCR)はTesseract未設定だと選べない。</summary>
     private void ConditionKind_Changed(object sender, SelectionChangedEventArgs e)
     {
-        if (sender is ComboBox cb && cb.DataContext is Models.Condition c && c.Kind == 2 && !HasValidTesseract)
+        // バインド時の初回発火(=以前の選択が無い)では警告しない。
+        // ここで弾くと、Tesseract 未設定の環境でマクロを開いただけで
+        // 保存済みの OCR 条件が変数条件に書き換わってしまう。
+        bool byUser = e.RemovedItems.Count > 0;
+
+        if (byUser && sender is ComboBox cb && cb.DataContext is Models.Condition c && c.Kind == 2 && !HasValidTesseract)
         {
             MessageBox.Show(this,
                 "文字認識(OCR)を使うには、メニューの「ファイル → 設定」で\nTesseract のパスを設定してください。",
@@ -504,16 +555,49 @@ public partial class MainWindow : Window
     // ============================================================
     //  テンプレ画像フィールド
     // ============================================================
+    /// <summary>マクロ内の全ての条件(if / elif / while)を列挙する。</summary>
+    private static IEnumerable<Models.Condition> AllConditions(MacroDocument doc)
+    {
+        foreach (var b in PythonGenerator.AllBlocks(doc.Blocks))
+        {
+            if (b is IfBlock ib)
+            {
+                yield return ib.Condition;
+                foreach (var br in ib.ElseIfs) yield return br.Condition;
+            }
+            else if (b is LoopBlock lb)
+            {
+                yield return lb.Condition;
+            }
+        }
+    }
+
     private void LoadImages()
     {
+        // 画像選択の ComboBox は ItemsSource にこのコレクションを使っている。
+        // Clear するとその瞬間に選択が外れ、TwoWay バインド経由で
+        // Condition.ImageRef が空で上書きされてしまうため、退避して書き戻す。
+        var saved = _activeDoc is null
+            ? Array.Empty<(Models.Condition Cond, string Ref)>()
+            : AllConditions(_activeDoc).Select(c => (Cond: c, Ref: c.ImageRef)).ToArray();
+
         TemplateImages.Clear();
         TemplateImageRefs.Clear();
-        if (_store is null || _activeDoc is null) return;
-        foreach (var img in _store.ListImages(_activeDoc))
+
+        if (_store != null && _activeDoc != null)
         {
-            TemplateImages.Add(img);
-            TemplateImageRefs.Add(img.RelRef);
+            foreach (var img in _store.ListImages(_activeDoc))
+            {
+                TemplateImages.Add(img);
+                TemplateImageRefs.Add(img.RelRef);
+            }
         }
+
+        // 一覧に残っている参照のみ復元する(消さない方向にだけ働かせる)
+        foreach (var (cond, imgRef) in saved)
+            if (!string.IsNullOrEmpty(imgRef) && cond.ImageRef != imgRef && TemplateImageRefs.Contains(imgRef))
+                cond.ImageRef = imgRef;
+
         UpdateThumbWidth();
     }
 
