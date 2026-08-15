@@ -110,7 +110,12 @@ public sealed class MacroStore
             if (m.Success && int.TryParse(m.Groups[1].Value, out var n))
                 max = Math.Max(max, n);
         }
-        return $"macro{max + 1}.py";
+
+        // 削除したマクロのテンプレ画像フォルダは残るため、同じ番号を再利用すると
+        // 新規マクロが前のマクロの画像を引き継いでしまう。残っている番号は飛ばす。
+        int next = max + 1;
+        while (Directory.Exists(Path.Combine(TemplateDir, $"macro{next}"))) next++;
+        return $"macro{next}.py";
     }
 
     /// <summary>マクロを保存し、保存先パスを doc に反映する。</summary>
