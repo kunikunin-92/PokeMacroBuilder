@@ -18,7 +18,7 @@ Python を書かなくても、「A ボタンを押す」「3 秒待つ」「10 
 |---|---|
 | OS | Windows 10 / 11（64bit） |
 | 必要なもの | [Poke-Controller](https://github.com/KawaSwitch/Poke-Controller)（または Poke-Controller Modified） |
-| .NET | **インストール不要**（配布版に同梱されています） |
+| .NET | **インストール不要**（配布版に同梱） |
 
 画像認識・文字認識を使う場合のみ、追加で以下が必要です（使わなければ不要）。
 
@@ -30,12 +30,8 @@ Python を書かなくても、「A ボタンを押す」「3 秒待つ」「10 
 ## インストール
 
 1. [Releases](https://github.com/kunikunin-92/PokeMacroBuilder/releases/latest) から
-   `PokeMacroBuilder-vX.X.X-win-x64.zip` をダウンロードします。
-2. zip を**展開**します（展開せずに中身を直接実行しないでください）。
-3. `PokeMacroBuilder.exe` をダブルクリックで起動します。
-
-インストーラーはありません。フォルダごと好きな場所に置いて使えます。
-不要になったらフォルダを削除するだけでアンインストール完了です。
+   `PokeMacroBuilder-vX.X.X-win-x64.zip` をダウンロード。
+3. `PokeMacroBuilder.exe` を起動。
 
 > **「Windows によって PC が保護されました」と出たら**
 > 配布ファイルにデジタル署名を付けていないため、初回起動時に SmartScreen の警告が出ます。
