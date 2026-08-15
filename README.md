@@ -180,7 +180,11 @@ dotnet publish PokeMacroBuilder/PokeMacroBuilder.csproj -c Release -r win-x64 --
 
 ---
 
+## ライセンス
+
+[MIT License](LICENSE) — 著作権表示を残していただければ、自由に使用・改変・再配布できます。
+
 ## 免責
 
 本ツールは Poke-Controller の非公式な補助ツールです。
-利用は自己責任でお願いします。
+本ソフトウェアは無保証で提供されます。利用は自己責任でお願いします。
